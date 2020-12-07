@@ -5,7 +5,7 @@ from matplotlib.patches import RegularPolygon, Polygon, Rectangle, Circle
 from matplotlib.collections import PatchCollection, RegularPolyCollection
 import matplotlib.cm as cm
 
-from lattice import Lattice, ReciprocalLattice
+from reciprocal.lattice import Lattice, ReciprocalLattice
 
 class Canvas():
 

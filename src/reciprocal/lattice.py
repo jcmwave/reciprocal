@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from primitive import Primitive, BrillouinZone
-from utils import rotation2D
-from primitive import order_lexicographically
+from reciprocal.primitive import Primitive, BrillouinZone
+from reciprocal.utils import rotation2D
+from reciprocal.primitive import order_lexicographically
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """

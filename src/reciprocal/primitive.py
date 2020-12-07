@@ -1,7 +1,7 @@
 import numpy as np
-from utils import (apply_symmetry_operators, lies_on_vertex, lies_on_poly,
+from reciprocal.utils import (apply_symmetry_operators, lies_on_vertex, lies_on_poly,
                    name_vertices, lies_on_sym_line)
-from symmetry import Symmetry
+from reciprocal.symmetry import Symmetry
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon, Circle
 import itertools
@@ -70,22 +70,9 @@ class Primitive():
 
 
     def area(self):
-        if self.shape == 'square':
-            area = self.vectors.length1**2
-        elif self.shape == 'rectangle':
-            area = self.vectors.length1*self.vectors.length2
-        elif self.shape == 'hexagon':
-            area = (np.sqrt(3)/2.0)*(self.vectors.length1)**2
-        elif self.shape == 'general':
-            area = 0.0
-            for row in range(1, self.vertices.shape[0]+1):
-                vertex1 = self.vertices[row-1, :]
-                if row == self.vertices.shape[0]:
-                    row = 0
-                vertex2 = self.vertices[row, :]
-                mat = np.array([[vertex1[0], vertex2[0]],
-                                [vertex1[1], vertex2[1]]])
-                area += 0.5* np.linalg.det(mat)
+        x = self.vertices[:,0]
+        y = self.vertices[:,1]
+        area =  0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))        
         return area
 
     def make_vertices(self):
