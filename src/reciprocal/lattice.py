@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from reciprocal.primitive import Primitive, BrillouinZone
+from reciprocal.unit_cell import UnitCell, BrillouinZone
 from reciprocal.utils import rotation2D
-from reciprocal.primitive import order_lexicographically
+from reciprocal.unit_cell import order_lexicographically
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -22,22 +22,49 @@ def angle_between(v1, v2):
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
-def make_lattice_points(first_orders, second_orders, v1, v2):
+def make_lattice_points(first_orders, second_orders, vktr1, vktr2):
+    """Return a list of lattice points.
+
+    The lattice point with order N1 == N2 == 0 is excluded.
+
+    Parameters
+    ----------
+    first_orders: range
+        the integer orders of v1 to iterate over
+    second_orders: range
+        the integer orders of v2 to iterate over
+    vktr1: (2,)<np.double> np.array
+        the first lattice vector
+    vktr2: (2,)<np.double> np.array
+        the second lattice vector
+
+    Returns
+    -------
+    list of (2,)<np.double> np.array
+    """
     lattice_points = []
-    #shortest = np.inf
     for xi in first_orders:
         for yi in second_orders:
             if xi == 0 and yi == 0:
                 continue
-            pos = v1*xi+v2*yi
-            #dist = np.linalg.norm(pos)
+            pos = vktr1*xi+vktr2*yi
             lattice_points.append(pos)
-            #if dist < shortest:
-                #shortest = dist
-            #plt.scatter(pos[0], [pos[1]])
     return lattice_points
 
 def get_unique_lengths(lattice_points):
+    """Return the unique distance from the origin to a set of lattice points.
+
+    Parameters
+    ----------
+    lattice_points: list of (2,)<np.double> np.array
+        the lattice points used to calculate unique distances
+
+    Returns
+    -------
+    list of floats
+        the unique distances from the origin to the lattice points
+
+    """
     lengths = []
     for point in lattice_points:
         dist = np.linalg.norm(point)
@@ -47,6 +74,22 @@ def get_unique_lengths(lattice_points):
     return lengths
 
 def get_n_shortest(lattice_points, n_shortest, unique_lengths):
+    """Return N lattice points with smallest unique distance to the origin.
+
+    Parameters
+    ----------
+    lattice_points: (N,2)<np.double> np.ndarray
+        array of lattice points
+    n_shortest: 0<int<=2
+        how many lattice points to return
+    unique_lengths: list of floats
+        the unqiue distance to the origin of the lattice points
+
+    Returns
+    -------
+    list of (N,2)<np.double> np.ndarray
+        the lattice points with unique smallest distance to the origin
+    """
     start_row = 0
     n_found_vectors = 0
     vectors = []
@@ -55,35 +98,22 @@ def get_n_shortest(lattice_points, n_shortest, unique_lengths):
         for row in range(start_row, lattice_points.shape[0]):
             pos = lattice_points[row, :]
             dist = np.linalg.norm(pos)
-            #print(row, pos, dist)
             conditions = np.isclose(dist, length)
 
-            # if conditions:
-            #     hw = dist*0.05
-            #     width = dist*0.02
-            #     plt.arrow(0.0, 0.0, pos[0], pos[1],
-            #               head_width=hw,
-            #               width=width,
-            #               color='r',
-            #               ec='r',
-            #               length_includes_head=True)
-            #     plt.text(pos[0]*0.5, pos[1]*0.5, plot_n)
-            #     plot_n += 1
-
             if n_found_vectors == 1:
-                arg = np.clip(vectors[0].dot(pos)/(np.linalg.norm(vectors[0])*dist), -1.0, 1.0)
+                """the second vector needs to fulfill extra conditions"""
+                arg = np.clip(vectors[0].dot(pos)/
+                              (np.linalg.norm(vectors[0])*dist), -1.0, 1.0)
                 sep_angle = np.arccos(arg)
                 cross_prod = np.cross(vectors[0], pos)
                 obtuse = sep_angle >= np.pi*0.5
                 not_reflex = cross_prod[2] > 0.
                 linearly_independent = np.linalg.norm(cross_prod)/np.linalg.norm(vectors[0]) > 1e-3
-                #print(row, conditions, obtuse, linearly_independent, not_reflex)
                 conditions = conditions and obtuse
                 conditions = conditions and linearly_independent
                 conditions = conditions and not_reflex
 
             if conditions:
-                #print("added to vectors")
                 vectors.append(pos)
                 n_found_vectors += 1
                 start_row = row
@@ -94,9 +124,46 @@ def get_n_shortest(lattice_points, n_shortest, unique_lengths):
 
 
 class LatticeVectors():
+    """
+    Defines two independent basis vectors of a lattice.
+
+    Attribues
+    ---------
+    length1: float
+        length of the first lattice vector
+    length2: float
+        length of the second lattice vector
+    angle: float
+        angle between the lattice vectors in degrees
+    vec1: (3,)<float>np.array
+        first lattice vector
+    vec2: (3,)<float>np.array
+        second lattice vector
+
+    Methods
+    -------
+    make_vectors(self)
+        sets vector class attributes from lengths and angle
+    reciprocal_vectors(self)
+        returns reciprocal lattice vectors
+    get_shortest_vectors(self)
+        return the shortest possible lattice vectors
+    """
 
     def __init__(self, length1=None, length2=None, angle=None,
                  vector1=None, vector2=None):
+        """
+        initialize LatticeVectors object.
+
+        This class can be initialized via two mutually exclusive argument
+        combinations. Either:
+
+        length1, length2 and angle
+
+        or
+
+        vector1 and vector2
+        """
         valid_inputs = False
         if length1 is not None and length2 is not None and angle is not None:
             valid_inputs = True
@@ -121,12 +188,17 @@ class LatticeVectors():
             self.length2 = np.linalg.norm(vector2)
 
     def make_vectors(self):
+        """Set vector attributes using lengths and angle.
+
+        The first vector is assumed to lie along the x axis.
+        """
         self.vec1 = self.length1*np.array([1.0, 0.0, 0.0])
         self.vec2 = self.length2*np.array([np.cos(np.radians(self.angle)),
                                            np.sin(np.radians(self.angle)), 0.0])
 
 
     def reciprocal_vectors(self):
+        """Return recprocal lattice vectors based on this lattice."""
         if self.vec1 is None or self.vec2 is None:
             self.make_vectors()
 
@@ -151,44 +223,34 @@ class LatticeVectors():
         return rl
 
     def get_shortest_vectors(self):
-        vec1 = self.vec1
-        vec2 = self.vec2
-        lv1 = self.length1
-        lv2 = self.length2
-        #print(lv1, lv2)
-        #equal_lengths = np.isclose(lv1, lv2)
+        """Return arrays of lattice vectors that are as short as possible."""
         n_shortest = 1
-        if np.isclose(lv1, lv2):
+        if np.isclose(self.length1, self.length2):
             first = 2
             second = 2
             n_shortest = 2
-        if lv1 > lv2:
-            second = int(np.ceil(lv1/lv2))
+        if self.length1 > self.length2:
+            second = int(np.ceil(self.length1/self.length2))
             first = 2
         else:
-            first = int(np.ceil(lv2/lv1))
+            first = int(np.ceil(self.length2/self.length1))
             second = 2
 
         first_orders = range(-first, first+1)
         second_orders = range(-second, second+1)
-        #MOrders = len(first_orders)*len(second_orders)
-        v1 = vec1
-        v2 = vec2
 
-        lattice_points = make_lattice_points(first_orders, second_orders, v1, v2)
+        lattice_points = make_lattice_points(first_orders, second_orders,
+                                             self.vec1, self.vec2)
         unique_lengths = get_unique_lengths(lattice_points)
         lattice_points = np.array(lattice_points)
         lattice_points = order_lexicographically(lattice_points,
                                                  start=0.5*np.pi-1e-1)
 
-
         vectors = []
         vectors = get_n_shortest(lattice_points, 2, unique_lengths)
-        #if len(vectors) == 2:
         vectors = np.concatenate([vectors])
         return vectors[0, :], vectors[1, :]
-        #else:
-        #    return v1, v2
+
 
 
 
@@ -199,29 +261,36 @@ class LatticeVectors():
 
 
 class Lattice():
-
+    """
+    Defines a periodic lattice in 2D based on two independent lattice vectors
+    defined by their lengths and separation angle.
+    """
     def __init__(self, length1, length2, angle):
         lattice_vectors = LatticeVectors(length1=length1,
                                          length2=length2,
                                          angle=angle)
         self.vectors = lattice_vectors
-        self.primitive = None
-        self.make_primitive()
+        self.unit_cell = None
+        self.make_unit_cell()
 
-    def make_primitive(self):
-        self.primitive = Primitive(self.vectors)
+    def make_unit_cell(self):
+        self.unit_cell = UnitCell(self.vectors)
 
     def make_reciprocal(self):
         r_vectors = self.vectors.reciprocal_vectors()
         return ReciprocalLattice(r_vectors)
 
 class ReciprocalLattice(Lattice):
+    """
+    Extends the lattice class to define a reciprocal lattice. A reciprocal
+    lattice has a BrillouinZone as its unit_cell.
+    """
 
     def __init__(self, vectors):
         self.vectors = vectors
         self.bzone = None
-        self.make_primitive()
-        self.primitive = self.bzone
+        self.make_unit_cell()
+        self.unit_cell = self.bzone
 
-    def make_primitive(self):
+    def make_unit_cell(self):
         self.bzone = BrillouinZone(self.vectors)
