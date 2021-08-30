@@ -186,6 +186,9 @@ class LatticeVectors():
         self.angle = np.degrees(angle_between(vector1, vector2))
         self.length1 = np.linalg.norm(vector1)
         self.length2 = np.linalg.norm(vector2)
+        
+    def __repr__(self):
+        return f"LatticeVectors({self.vec1}, {self.vec2})"
 
     @classmethod
     def from_lengths_angle(lat_vec, length1, length2, angle):
@@ -336,6 +339,9 @@ class Lattice():
             self.unit_cell = UnitCell(self, WignerSeitz=False)
         else:
             self.unit_cell = UnitCell(self, WignerSeitz=True)
+            
+    def __repr__(self):
+        return f"Lattice({self.vectors}, {self.lattice_type})"
 
 
     @property
