@@ -72,7 +72,7 @@ def reflection2D(axis):
     return None
 
 
-def applySymmetryOperators(point,symmetry):
+def apply_symmetry_operators(point,symmetry):
     points = []
     refYOperators = []
     rotOperators = []

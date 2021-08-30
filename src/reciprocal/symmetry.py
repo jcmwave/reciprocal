@@ -1,86 +1,183 @@
 import numpy as np
+from enum import Enum, auto
+
+
+class SpecialPoint(Enum):
+    GAMMA = auto() #Center of the Brillouin Zone
+    K = auto() # Vertex between two edges of a hexagon
+    M = auto() # Center of a hexagonal edge
+    X = auto() # Center of a cubic/rectangular edge or oblique long edge
+    Y = auto() # Center of a rectangular side
+    Y1 = auto() # Center of an oblique short edge
+    Y2 = auto() # Center of an oblique short edge
+    H1 = auto() # Vertex of an oblique Brillouin Zone
+    H2 = auto() # Vertex of an oblique Brillouin Zone
+    H3 = auto() # Vertex of an oblique Brillouin Zone
+    C = auto() # Center of the corner like edge of an oblique Brillouin Zone
+    AXIS = auto() # Lying on a Symmetry axis
+    INTERIOR = auto() # Points with no special symmetry
+
+class PointSymmetry(Enum):
+    C_INF = auto() # Infinite discrete rotational symmetry (Gamma point only)
+    SIGMA_D = auto() # Diagonal mirror symmetry
+    SIGMA_H = auto() # Horizontal mirror symmetry
+    SIGMA_V = auto() # Vertical mirror symmetry
+    C1 = auto() # 2 pi rotational symmetry
+    C2 = auto() # pi rotational symmetry
+    C3 = auto() # 2/3 pi rotational symmetry
+    C4 = auto() # pi /2 rotational symmetry
+    C6 = auto() # pi /3 rotational symmetry
+    D2 = auto() # combination of C2 and SIGMA_H
+    D3 = auto() # combination of C3 and SIGMA_H
+    D4 = auto() # combination of C4 and SIGMA_H
+    D6 = auto() # combination of C6 and SIGMA_H
 
 
 def validate_symmetry(symmetry):
     """
     return if symmetry name belongs to set of valid names
     """
-    syms = Symmetry.known_symmetries
-    return symmetry in syms
+    names = [name[0] for name in PointSymmetry.__members__.items()]
+    return symmetry in names
+
+
 
 class Symmetry(object):
     """
     class for obtaining the number of reflection and rotations for
     a given symmetry type
+
+    Attribues
+    ---------
+    name: PointSymmetry
+        the point symmetry of this symmetry
     """
-
-
-    known_symmetries = {'inf', 'XY', 'C2', 'C3', 'C4', 'C6', 'D2', 'D4', 'D6'}
+    #known_symmetries = {'inf', 'XY', 'C2', 'C3', 'C4', 'C6', 'D2', 'D4', 'D6'}
 
     def __init__(self, symmetry):
-        if validate_symmetry(symmetry):
-            self.name = symmetry
+        self.group = symmetry
+
+    @classmethod
+    def from_string(Symmetry, string):
+        if validate_symmetry(string):
+            return Symmetry(PointSymmetry[string])
         else:
-            raise ValueError("symmetry:{} unknown".format(symmetry))
+            raise ValueError("symmetry:{} unknown".format(string))
+
+    def reduce(self):
+        reducible = {PointSymmetry.D2: PointSymmetry.C2,
+                     PointSymmetry.D4: PointSymmetry.C4,
+                     PointSymmetry.D6: PointSymmetry.C6}
+
+        if not self.group in reducible.keys():
+            raise ValueError("cannot reduce symmetry: {}".format(self.group))
+        else:
+            return Symmetry(reducible[self.group])
+
+    def get_n_symmetry_ops(self):
+        """
+        return total number of symmetry operations
+        """
+        n_sym_ops = {PointSymmetry.C_INF:np.inf,
+                     PointSymmetry.SIGMA_D:1,
+                     PointSymmetry.SIGMA_H:1,
+                     PointSymmetry.SIGMA_V:1,
+                     PointSymmetry.C1:1,
+                     PointSymmetry.C2:2,
+                     PointSymmetry.C3:3,
+                     PointSymmetry.C4:4,
+                     PointSymmetry.C6:6,
+                     PointSymmetry.D2:4,
+                     PointSymmetry.D4:8,
+                     PointSymmetry.D6:12}
+        return n_sym_ops[self.group]
 
     def get_n_rotations(self):
         """
         return number of rotations for the symmetry op
         """
-        rotations = {'inf':0,
-                     'XY':0,
-                     'C2':2,
-                     'C3':3,
-                     'C4':4,
-                     'C6':6,
-                     'D2':2,
-                     'D4':4,
-                     'D6':6}
-        return rotations[self.name]
+        rotations = {PointSymmetry.C_INF:0,
+                     PointSymmetry.SIGMA_D:0,
+                     PointSymmetry.SIGMA_H:0,
+                     PointSymmetry.SIGMA_V:0,
+                     PointSymmetry.C1:1,
+                     PointSymmetry.C2:2,
+                     PointSymmetry.C3:3,
+                     PointSymmetry.C4:4,
+                     PointSymmetry.C6:6,
+                     PointSymmetry.D2:2,
+                     PointSymmetry.D4:4,
+                     PointSymmetry.D6:6}
+        return rotations[self.group]
 
     def get_n_reflections_y(self):
         """
         return number of reflections about the x axis
         """
-        reflections = {'inf':0,
-                       'XY':0,
-                       'C2':0,
-                       'C3':0,
-                       'C4':0,
-                       'C6':0,
-                       'D2':1,
-                       'D4':1,
-                       'D6':1}
-        return reflections[self.name]
+        reflections = {PointSymmetry.C_INF:0,
+                       PointSymmetry.SIGMA_D:0,
+                       PointSymmetry.SIGMA_H:1,
+                       PointSymmetry.SIGMA_V:0,
+                       PointSymmetry.C1:0,
+                       PointSymmetry.C2:0,
+                       PointSymmetry.C3:0,
+                       PointSymmetry.C4:0,
+                       PointSymmetry.C6:0,
+                       PointSymmetry.D2:1,
+                       PointSymmetry.D4:1,
+                       PointSymmetry.D6:1}
+        return reflections[self.group]
+
+    def get_n_reflections_x(self):
+        """
+        return number of reflections about the y axis
+        """
+        reflections = {PointSymmetry.C_INF:0,
+                       PointSymmetry.SIGMA_D:0,
+                       PointSymmetry.SIGMA_H:0,
+                       PointSymmetry.SIGMA_V:1,
+                       PointSymmetry.C1:0,
+                       PointSymmetry.C2:0,
+                       PointSymmetry.C3:0,
+                       PointSymmetry.C4:0,
+                       PointSymmetry.C6:0,
+                       PointSymmetry.D2:0,
+                       PointSymmetry.D4:0,
+                       PointSymmetry.D6:0}
+        return reflections[self.group]
 
     def get_n_reflections_xy(self):
         """
         return number of reflections about the x-y diagonal
         """
-        reflections = {'inf':0,
-                       'XY':1,
-                       'C2':0,
-                       'C3':0,
-                       'C4':0,
-                       'C6':0,
-                       'D2':0,
-                       'D4':0,
-                       'D6':0}
-        return reflections[self.name]
+        reflections = {PointSymmetry.C_INF:0,
+                       PointSymmetry.SIGMA_D:1,
+                       PointSymmetry.SIGMA_H:0,
+                       PointSymmetry.SIGMA_V:0,
+                       PointSymmetry.C1:0,
+                       PointSymmetry.C2:0,
+                       PointSymmetry.C3:0,
+                       PointSymmetry.C4:0,
+                       PointSymmetry.C6:0,
+                       PointSymmetry.D2:0,
+                       PointSymmetry.D4:0,
+                       PointSymmetry.D6:0}
+        return reflections[self.group]
 
     def get_symmetry_cone_angle(self):
         """
         return the smallest angle which  covers a unique segment of the
         brillouin zone
         """
-        angle = {'C2':2.*np.pi/2.0,
-                 'C3':2.*np.pi/3.0,
-                 'C4':2.*np.pi/4.0,
-                 'C6':2.*np.pi/6.0,
-                 'D2':2.*np.pi/4.0,
-                 'D4':2.*np.pi/8.0,
-                 'D6':2.*np.pi/12.0}
-        if self.name in angle:
-            return angle[self.name]
-        raise ValueError("symmetry {}".format(self.name) +
+        angle = {PointSymmetry.C1:2.*np.pi/1.0,
+                 PointSymmetry.C2:2.*np.pi/2.0,
+                 PointSymmetry.C3:2.*np.pi/3.0,
+                 PointSymmetry.C4:2.*np.pi/4.0,
+                 PointSymmetry.C6:2.*np.pi/6.0,
+                 PointSymmetry.D2:2.*np.pi/4.0,
+                 PointSymmetry.D4:2.*np.pi/8.0,
+                 PointSymmetry.D6:2.*np.pi/12.0}
+        if self.group in angle:
+            return angle[self.group]
+        raise ValueError("symmetry {}".format(self.group) +
                          " has no Symmetry Cone Angle")

@@ -1,6 +1,6 @@
 import numpy as np
 from reciprocal.utils import (apply_symmetry_operators, lies_on_vertex, lies_on_poly,
-                   name_vertices, lies_on_sym_line)
+                              name_vertices, lies_on_sym_line, rotation2D)
 from reciprocal.symmetry import Symmetry
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon, Circle
@@ -194,8 +194,23 @@ class Primitive():
             vec1 = np.array([0.0, 0.0])
             vec2 = np.array([0.0, 0.0])
         else:
-            vec1 = (0.5/(n_grid_points-1))*(self.vectors.vec1[:2])
-            vec2 = (0.5/(n_grid_points-1))*(self.vectors.vec2[:2])
+            vec1 = np.array(self.vectors.vec1[:2])
+            vec2 = np.array(self.vectors.vec2[:2])
+            #angle = angle_between(vec1,vec2)
+            rot1 = rotation2D(30.)
+            rot2 = rotation2D(-60.)            
+            vec1 = rot1.dot(vec1)
+            vec2 = rot2.dot(vec2)            
+            #vec2 = np.array([1.0, 0.0])*
+            #print("[{} - {}]".format(vec1,self.vectors.vec2[:2]))
+
+            #vec1 = rot.dot(vec1)
+            #print(vec2)
+            vec1 = ((1/np.sqrt(3))/(n_grid_points-1))*(vec1)            
+            vec2 = (0.5/(n_grid_points-1))*(vec2)
+            #plt.plot([0.,vec1[0]],[0.,vec1[1]],color='b')
+            #plt.plot([0.,0.],vec2,color='b')            
+            #print("{} - {}".format(vec1, vec2))
 
         ipoly_samp = {}
         ipoly_samp['G'] = []

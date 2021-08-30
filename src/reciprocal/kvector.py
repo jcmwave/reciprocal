@@ -127,13 +127,13 @@ class KVectorGroup(object):
     stored in a single array
     """
 
-    def __init__(self, wavelength, nRows,
+    def __init__(self, wavelength, n_rows,
                  n=None, theta=None, phi=None, normal=None,
                  kx=None, ky=None, kz=None, validate=True, data=None):
         self.wavelength = wavelength #scalar
         self.k0 = 2*np.pi/(self.wavelength)
-        self.nRows = nRows
-        self.data_ = np.empty((nRows,7),dtype=np.float64)
+        self.n_rows = n_rows
+        self.data_ = np.empty((n_rows,7),dtype=np.float64)
         if data is None:
             self.data_.fill(float('nan'))
         else:
@@ -260,7 +260,7 @@ class KVectorGroup(object):
 
     @property
     def normal(self):
-        norm = np.empty(self.nRows,dtype=np.dtype("U2"))
+        norm = np.empty(self.n_rows,dtype=np.dtype("U2"))
         norm[self.normal_ == 1] = "+z"
         norm[self.normal_ == -1] = "-z"
         return norm
@@ -289,11 +289,10 @@ class KVectorGroup(object):
                          kz = datarow[self.cols.kz.value],
                          validate=False)
 
-    def append(self,other):
+    def __add__(self,other):
         assert np.isclose(other.wavelength,self.wavelength)
-        newNRows = self.nRows + other.nRows
+        newNRows = self.n_rows + other.n_rows
         newData = np.concatenate( (self.data_,other.data_),axis=0)
-
         return KVectorGroup(self.wavelength,newNRows,
                                  data=newData,validate=False)
 

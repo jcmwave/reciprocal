@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from enum import Enum
 from reciprocal.unit_cell import UnitCell, BrillouinZone
 from reciprocal.utils import rotation2D
 from reciprocal.unit_cell import order_lexicographically
-
+from reciprocal.utils import BravaisLattice
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / np.linalg.norm(vector)
@@ -122,10 +123,22 @@ def get_n_shortest(lattice_points, n_shortest, unique_lengths):
 
     raise ValueError("not enough vectors found")
 
+def make_vectors(length1, length2, angle):
+    """Returns two vectors defined using lengths and angle between.
+
+    The first vector is assumed to lie along the x axis. Both vectors lie in the
+    x-y plane.
+    """
+    vec1 = length1*np.array([1.0, 0.0, 0.0])
+    vec2 = length2*np.array([np.cos(np.radians(angle)),
+                                       np.sin(np.radians(angle)), 0.0])
+    return vec1, vec2
 
 class LatticeVectors():
     """
     Defines two independent basis vectors of a lattice.
+
+    Use the class methods from_vectors, from_lengths_angle to construct.
 
     Attribues
     ---------
@@ -142,6 +155,9 @@ class LatticeVectors():
 
     Methods
     -------
+    from_vectors(vector1, vector2) [Constructor]
+
+
     make_vectors(self)
         sets vector class attributes from lengths and angle
     reciprocal_vectors(self)
@@ -150,55 +166,59 @@ class LatticeVectors():
         return the shortest possible lattice vectors
     """
 
-    def __init__(self, length1=None, length2=None, angle=None,
-                 vector1=None, vector2=None):
+    def __init__(self, vector1, vector2):
         """
         initialize LatticeVectors object.
 
-        This class can be initialized via two mutually exclusive argument
-        combinations. Either:
+        Parameters
+        ----------
+        vector1: (3,)<np.double>np.array
+            first lattice vector
+        vector2: (3,)<np.double>np.array
+            second lattice vector
 
-        length1, length2 and angle
-
-        or
-
-        vector1 and vector2
+        Returns
+        -------
+        LatticeVectors
         """
-        valid_inputs = False
-        if length1 is not None and length2 is not None and angle is not None:
-            valid_inputs = True
-            input_type = 1
-        elif vector1 is not None and vector2 is not None:
-            valid_inputs = True
-            input_type = 2
-        if valid_inputs is False:
-            raise ValueError("inputs must either be two vector lengths and "+
-                             "lattice angle or the lattice vectors")
+        self.vec1 = vector1
+        self.vec2 = vector2
+        self.angle = np.degrees(angle_between(vector1, vector2))
+        self.length1 = np.linalg.norm(vector1)
+        self.length2 = np.linalg.norm(vector2)
 
-        if input_type == 1:
-            self.length1 = length1
-            self.length2 = length2
-            self.angle = angle
-            self.make_vectors()
-        elif input_type == 2:
-            self.vec1 = vector1
-            self.vec2 = vector2
-            self.angle = np.degrees(angle_between(vector1, vector2))
-            self.length1 = np.linalg.norm(vector1)
-            self.length2 = np.linalg.norm(vector2)
+    @classmethod
+    def from_lengths_angle(lat_vec, length1, length2, angle):
+        """Return LatticeVectors from lengths and angle between.
 
-    def make_vectors(self):
-        """Set vector attributes using lengths and angle.
+        typical usage:
+        lat_vec = LatticeVectors.from_lengths_angle(length1, length2, angle)
 
-        The first vector is assumed to lie along the x axis.
+        Parameters
+        ----------
+        lat_vec: LatticeVector
+            an instance of this class
+        length1: float
+            length of the first lattice vector
+        length2: float
+            length of the second lattice vector
+        angle: float
+            angle between vectors in degrees
+
+        Returns
+        -------
+        LatticeVectors
         """
-        self.vec1 = self.length1*np.array([1.0, 0.0, 0.0])
-        self.vec2 = self.length2*np.array([np.cos(np.radians(self.angle)),
-                                           np.sin(np.radians(self.angle)), 0.0])
-
+        vectors = make_vectors(length1, length2, angle)
+        return lat_vec(vectors[0], vectors[1])
 
     def reciprocal_vectors(self):
-        """Return recprocal lattice vectors based on this lattice."""
+        """Return reciprocal lattice vectors
+
+        Returns
+        -------
+        LatticeVectors
+        """
         if self.vec1 is None or self.vec2 is None:
             self.make_vectors()
 
@@ -223,7 +243,12 @@ class LatticeVectors():
         return rl
 
     def get_shortest_vectors(self):
-        """Return arrays of lattice vectors that are as short as possible."""
+        """Return arrays of lattice vectors that are as short as possible.
+
+        Returns
+        -------
+        (2,) tuple of (3,)<np.double> np.array
+        """
         n_shortest = 1
         if np.isclose(self.length1, self.length2):
             first = 2
@@ -254,43 +279,191 @@ class LatticeVectors():
 
 
 
-
-
-
-
-
-
 class Lattice():
     """
-    Defines a periodic lattice in 2D based on two independent lattice vectors
-    defined by their lengths and separation angle.
-    """
-    def __init__(self, length1, length2, angle):
-        lattice_vectors = LatticeVectors(length1=length1,
-                                         length2=length2,
-                                         angle=angle)
-        self.vectors = lattice_vectors
-        self.unit_cell = None
-        self.make_unit_cell()
+    Defines a periodic lattice in 2D
 
-    def make_unit_cell(self):
-        self.unit_cell = UnitCell(self.vectors)
+    Attributes
+    ----------
+    lattice_type: str
+        real-space or reciprocal
+    vectors: LatticeVectors
+        the lattice vectors defining the lattice
+    bravais: BravaisLattice
+        bravias lattice type (see class BravaisLattice)
+    unit_cell: UnitCell
+        the unit cell of the lattice
+    brillouin_zone: UnitCell
+        alias for unit_cell
+
+    Methods
+    -------
+    from_lat_vec_args(lattice, kwargs)
+        constructs a Lattice object using kwargs for a LatticeVector object
+    make_reciprocal(self)
+        returns a Lattice object defined by the reciprocal of this lattice
+
+    """
+    def __init__(self, lattice_vectors, lattice_type='real_space'):
+        """
+        initialize Lattice object.
+
+        The standard constructor for this class takes a LatticeVectors argument.
+        Alternatively the class method from_lat_vec_args may be used.
+
+        Parameters
+        ----------
+        lattice_vectors LatticeVectors
+            the lattice vectors
+
+        Returns
+        -------
+        Lattice
+        """
+        valid_lattice_types = ("real_space", "reciprocal")
+        if lattice_type not in valid_lattice_types:
+            raise ValueError("lattice type {}".format(lattice_type) +
+                             " not understood. lattice type must be in range "+
+                             "({})".format(valid_lattice_types))
+        self.lattice_type = lattice_type
+        if lattice_vectors is None:
+            lattice_vectors = LatticeVectors(**lv_args)
+        else:
+            lattice_vectors = lattice_vectors
+        self.vectors = lattice_vectors
+        self.bravais =  self.determine_bravais_lattice()
+        if self.lattice_type == 'real_space':
+            self.unit_cell = UnitCell(self, WignerSeitz=False)
+        else:
+            self.unit_cell = UnitCell(self, WignerSeitz=True)
+
+
+    @property
+    def brillouin_zone(self):
+        return self.unit_cell
+
+    @brillouin_zone.setter
+    def brillouin_zone(self, unit_cell):
+        self.unit_cell = unit_cell
+
+    @classmethod
+    def from_lat_vec_args(lattice, **kwargs):
+        """
+        construct a Lattice using kwargs for a LatticeVectors object.
+
+        This methods constructs the LatticeVectors object needed to construct
+        a Lattice. This requires keyword argments to determine the correct
+        LatticeVector constructor to use. kwargs must contain either vector1 and
+        vector2, or length1, length2 and angle.
+
+        Parameters
+        ----------
+        lattice: Lattice
+            A Lattice object
+        vector1: (2,)<np.double>np.array
+            The first lattice vector
+        vector2: (2,)<np.double>np.array
+            The second lattice vector
+        length1: float
+            The length of the first lattice vector
+        length2: float
+            The length of the second lattice vector
+        angle: float
+            The angle between lattice vectors in degrees
+
+        Returns
+        -------
+        Lattice
+        """
+        lat_vec = None
+        try:
+            if "vector1" in kwargs and "vector2" in kwargs:
+                lat_vec = LatticeVectors(kwargs['vector1'], kwargs['vector2'])
+        except:
+            pass
+        try:
+            if ("length1" in kwargs and "length2" in kwargs
+                and "angle" in kwargs):
+                lat_vec = LatticeVectors.from_lengths_angle(kwargs['length1'],
+                                                            kwargs['length2'],
+                                                            kwargs['angle'])
+        except:
+            pass
+        if lat_vec is None:
+            raise ValueError("could not construct LatticeVectors from args: " +
+                             "{}".format(kwargs))
+        return lattice(lat_vec)
 
     def make_reciprocal(self):
+        """Return a Lattice object defined by the reciprocal of this lattice.
+
+        Returns
+        -------
+        Lattice
+        """
         r_vectors = self.vectors.reciprocal_vectors()
-        return ReciprocalLattice(r_vectors)
+        return Lattice(r_vectors, lattice_type='reciprocal')
 
-class ReciprocalLattice(Lattice):
-    """
-    Extends the lattice class to define a reciprocal lattice. A reciprocal
-    lattice has a BrillouinZone as its unit_cell.
-    """
+    def determine_bravais_lattice(self):
+        """
+        determines the 2D bravais lattice of the unit cell
 
-    def __init__(self, vectors):
-        self.vectors = vectors
-        self.bzone = None
-        self.make_unit_cell()
-        self.unit_cell = self.bzone
+        Uses the vector lengths and angles of the lattice vectors to determine
+        the bravais lattice.
 
-    def make_unit_cell(self):
-        self.bzone = BrillouinZone(self.vectors)
+        Returns
+        -------
+        BravaisLattice
+        """
+        length1 = self.vectors.length1
+        length2 = self.vectors.length2
+        angle = self.vectors.angle
+        co_angle = 180. - angle
+        if np.isclose(length1, length2) and np.isclose(angle, 120.):
+            bv_lat = BravaisLattice.HEXAGON
+        elif np.isclose(length1, length2) and np.isclose(angle, 90.):
+            bv_lat = BravaisLattice.SQUARE
+        elif (np.isclose(angle, 90.) or
+              np.isclose(length2*np.cos(np.radians(co_angle)), length1)):
+            bv_lat = BravaisLattice.RECTANGLE
+        else:
+            bv_lat = BravaisLattice.OBLIQUE
+        return bv_lat
+
+    def orders_by_distance(self, max_order):
+        """
+        Returns lattices orders grouped by equal distance
+
+        Parameters
+        ----------
+        max_order: int
+            the maximum order of lattice vector to consider
+
+        Returns
+        -------
+        list of (N,2) <np.int> np.array
+            the lattice orders
+        (M,1) <np.double> np.array
+            the associated distances
+        """
+        vec1 = self.vectors.vec1
+        vec2 = self.vectors.vec2
+        n_rows = (2*max_order+1)**2
+        order_table = np.zeros((n_rows, 3))
+        row = 0
+        for order1 in range(-max_order, max_order+1):
+            for order2 in range(-max_order, max_order+1):
+                distance = np.linalg.norm(vec1*order1 + vec2*order2)
+                order_table[row,:] = np.array([order1, order2, distance])
+                row += 1
+        sort_indices = np.argsort(order_table[:,2])
+        order_table = order_table[sort_indices, :][1:, :]
+        order_table[:,2] = np.round(order_table[:,2], 5)
+        unique_distances = np.unique(order_table[:,2])
+        orders_list = []
+        for unique_dist in unique_distances:
+            equal_to_distance = np.isclose(order_table[:,2],unique_dist)
+            order_array = order_table[equal_to_distance, :2]
+            order_array = order_array.astype('int64')
+            orders_list.append(order_array)
+        return orders_list, unique_distances
