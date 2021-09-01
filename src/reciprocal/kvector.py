@@ -23,6 +23,9 @@ class KVector(object):
         if validate:
             combination = self.validateData()
             self.completeData(combination)
+            
+    def __repr__(self):
+        return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
     def validateData(self):
         validCombinations = []
@@ -147,7 +150,9 @@ class KVectorGroup(object):
         if validate:
             combination = self.validateData()
             self.completeData(combination)
-
+            
+    def __repr__(self):
+        return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
     def validateData(self):
         validColumns = []
