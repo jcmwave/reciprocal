@@ -8,7 +8,7 @@ import scipy.spatial
 from reciprocal.symmetry import Symmetry, SpecialPoint
 from reciprocal.utils import (apply_symmetry_operators, order_lexicographically,
                               lies_on_poly, lies_on_vertex)
-from reciprocal.kvector import KVectorGroup
+from reciprocal.kvector import KVectorGroup, BlochFamily
 #from kspacesampling import KVector
 #from kspacesampling import BrillouinZone
 #from kspacesampling import Symmetry
@@ -137,6 +137,13 @@ class KSpace():
         """
         nRows = points.shape[0]
         return KVectorGroup(self.wavelength, nRows,
+                            kx=points[:,0],
+                            ky=points[:,1],
+                            n=n, normal=direction)
+    
+    def convert_to_BlochFamily(self, points, n1, n2, n, direction):
+        nRows = points.shape[0]
+        return BlochFamily(self.wavelength, nRows, n1=n1, n2=n2,
                             kx=points[:,0],
                             ky=points[:,1],
                             n=n, normal=direction)
@@ -332,10 +339,12 @@ class PeriodicSampler():
         for i_family in range(n_sample_points):
             central_point = sampling[i_family]
             bloch_family = []
+            n1 = []
+            n2 = []
             for nx in range1:
                 for ny in range2:
                     trial_point = nx*vec1 + ny*vec2 + central_point
-
+                    
                     length = np.linalg.norm(trial_point)
                     if length > self.kspace.fermi_radius*(1-cutoff_tol):
                         continue
@@ -350,16 +359,17 @@ class PeriodicSampler():
                                                           opening_angle):
                             continue
 
-
-
-
+                    n1.append(nx)
+                    n2.append(ny)
                     all_points.append(trial_point)
                     bloch_family.append(trial_point)
                     counter += 1
 
             if len(bloch_family) > 0:
+                n1 = np.array(n1)
+                n2 = np.array(n2)
                 bloch_array = np.vstack(bloch_family)
-                kv_group = self.kspace.convert_to_KVectors(bloch_array, 1., 1)
+                kv_group = self.kspace.convert_to_BlochFamily(bloch_array, n1, n2, 1., 1)
                 bloch_families[i_family] = kv_group
         all_point_array = np.vstack(all_points)
         all_point_array = order_lexicographically(all_point_array)

@@ -305,6 +305,21 @@ class KVectorGroup(object):
     def str(self):
         return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
+class BlochFamily(KVectorGroup):
+
+    """
+    class for defining a group of k vectors belonging to one bloch group, allowing their components to be
+    stored in a single array
+    """
+
+    def __init__(self, wavelength, n_rows, n1, n2,
+                 n=None, theta=None, phi=None, normal=None,
+                 kx=None, ky=None, kz=None, validate=True, data=None):
+        self.n1 = n1
+        self.n2 = n2
+        super().__init__(wavelength, n_rows,
+                 n, theta, phi, normal,
+                 kx, ky, kz, validate, data)
 
 
 if __name__ == '__main__':
