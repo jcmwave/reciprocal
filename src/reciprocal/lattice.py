@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from enum import Enum
-from reciprocal.unit_cell import UnitCell, BrillouinZone
+from reciprocal.unit_cell import UnitCell
 from reciprocal.utils import rotation2D
 from reciprocal.unit_cell import order_lexicographically
 from reciprocal.utils import BravaisLattice
@@ -186,7 +186,7 @@ class LatticeVectors():
         self.angle = np.degrees(angle_between(vector1, vector2))
         self.length1 = np.linalg.norm(vector1)
         self.length2 = np.linalg.norm(vector2)
-        
+
     def __repr__(self):
         return f"LatticeVectors({self.vec1}, {self.vec2})"
 
@@ -339,7 +339,7 @@ class Lattice():
             self.unit_cell = UnitCell(self, WignerSeitz=False)
         else:
             self.unit_cell = UnitCell(self, WignerSeitz=True)
-            
+
     def __repr__(self):
         return f"Lattice({self.vectors}, {self.lattice_type})"
 
