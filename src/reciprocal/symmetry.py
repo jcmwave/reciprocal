@@ -63,6 +63,12 @@ class Symmetry(object):
         else:
             raise ValueError("symmetry:{} unknown".format(string))
 
+    def __str__(self):
+        return self.group.name
+
+    def __repr__(self):
+        return str(self.group)
+
     def reduce(self):
         reducible = {PointSymmetry.D2: PointSymmetry.C2,
                      PointSymmetry.D3: PointSymmetry.C3,

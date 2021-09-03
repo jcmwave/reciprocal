@@ -23,7 +23,7 @@ class KVector(object):
         if validate:
             combination = self.validateData()
             self.completeData(combination)
-            
+
     def __repr__(self):
         return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
@@ -150,7 +150,7 @@ class KVectorGroup(object):
         if validate:
             combination = self.validateData()
             self.completeData(combination)
-            
+
     def __repr__(self):
         return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
@@ -302,9 +302,69 @@ class KVectorGroup(object):
                                  data=newData,validate=False)
 
 
-    def str(self):
-        return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
+class BlochFamilyColumns(Enum):
+    order1 = 7
+    order2 = 8
+
+class BlochFamily(KVectorGroup):
+
+    """
+    Extends KVectorGroup to include a lattice index
+    """
+    def __init__(self, *args, order1=None, order2=None, **kwargs):
+         """Initialize a BlochFamily object
+
+         For more information on arguemnts, see KVectorGroup
+
+         Parameters
+         ----------
+         order1: (N,)<np.int>np.array
+            the first lattice order
+         second1: (N,)<np.int>np.array
+            the second lattice order
+         """
+         #order1 = kwargs.pop("order1")
+         #order2 = kwargs.pop("order2")
+         super(BlochFamily, self).__init__(*args, **kwargs)
+
+         extended_data = np.empty((self.n_rows,9), dtype=np.float64)
+         extended_data.fill(float('nan'))
+         extended_data[:,:BlochFamilyColumns.order1.value] = self.data_
+         self.data_ = extended_data
+         if order1 is not None:
+             self.data_[:, BlochFamilyColumns.order1.value] = order1
+         if order2 is not None:
+             self.data_[:, BlochFamilyColumns.order2.value] = order2
+
+    @classmethod
+    def from_kvector_group(bloch_family, kvector_group):
+        """Return BlochFamily from a KVectorGroup
+
+
+        """
+        return BlochFamily(kvector_group.wavelength,
+                           kvector_group.n_rows,
+                           data = kvector_group.data_,
+                           validate=False)
+
+    def set_orders(self, order1, order2):
+        self.data_[:, BlochFamilyColumns.order1.value] = order1
+        self.data_[:, BlochFamilyColumns.order2.value] = order2
+
+    @property
+    def order1(self):
+        return self.data_[:, BlochFamilyColumns.order1.value]
+
+    @property
+    def order2(self):
+        return self.data_[:, BlochFamilyColumns.order2.value]
+
+    def __repr__(self):
+        return_str =  "k:{},theta:{},phi:{},".format(self.k,self.theta,self.phi)
+        return_str += "normal:{},n:{},".format(self.normal,self.n)
+        return_str += "order1:{},order2:{}".format(self.order1, self.order2)
+        return return_str
 
 
 if __name__ == '__main__':

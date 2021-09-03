@@ -8,7 +8,7 @@ import scipy.spatial
 from reciprocal.symmetry import Symmetry, SpecialPoint
 from reciprocal.utils import (apply_symmetry_operators, order_lexicographically,
                               lies_on_poly, lies_on_vertex)
-from reciprocal.kvector import KVectorGroup
+from reciprocal.kvector import KVectorGroup, BlochFamily
 #from kspacesampling import KVector
 #from kspacesampling import BrillouinZone
 #from kspacesampling import Symmetry
@@ -90,8 +90,8 @@ class KSpace():
         sym = Symmetry.from_string(symmetry)
         if periodic_sampler is not None:
             lattice_sym = periodic_sampler.lattice.unit_cell.symmetry()
-            if lattice_sym != sym:
-                raise ValueError("symmetry {}".format(sym)+
+            if not lattice_sym.compatible(sym):
+                raise ValueError("symmetry {} ".format(sym)+
                                  "is not compatible with lattice symmetry"+
                                  " {}".format(lattice_sym))
         self.symmetry = sym
@@ -162,8 +162,8 @@ class KSpace():
         """
         if self.symmetry is not None:
             lattice_sym = lattice.unit_cell.symmetry()
-            if lattice_sym != self.symmetry:
-                raise ValueError("lattice symmetry {}".format(lattice_sym)+
+            if not lattice_sym.compatible(self.symmetry):
+                raise ValueError("lattice symmetry {} ".format(lattice_sym)+
                                  "is not compatible with kspace symmetry"+
                                  " {}".format(self.symmetry))
         self.periodic_sampler = PeriodicSampler(lattice, self)
@@ -353,6 +353,7 @@ class PeriodicSampler():
         for i_family in range(n_sample_points):
             central_point = sampling[i_family]
             bloch_family = []
+            lattice_orders = []
             for nx in range1:
                 for ny in range2:
                     trial_point = nx*vec1 + ny*vec2 + central_point
@@ -376,12 +377,16 @@ class PeriodicSampler():
 
                     all_points.append(trial_point)
                     bloch_family.append(trial_point)
+                    lattice_orders.append([nx, ny])
                     counter += 1
 
             if len(bloch_family) > 0:
                 bloch_array = np.vstack(bloch_family)
+                lattice_orders = np.vstack(lattice_orders)
                 kv_group = self.kspace.convert_to_KVectors(bloch_array, 1., 1)
-                bloch_families[i_family] = kv_group
+                bloch_fam = BlochFamily.from_kvector_group(kv_group)
+                bloch_fam.set_orders(lattice_orders[:,0], lattice_orders[:,1])
+                bloch_families[i_family] = bloch_fam
         all_point_array = np.vstack(all_points)
         all_point_array = order_lexicographically(all_point_array)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
