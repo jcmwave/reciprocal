@@ -528,7 +528,6 @@ class Canvas():
         norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
         plt.sca(self.ax)
         n_families = 0
-        print("plot_n_families: {}".format(plot_n_families))
         for family_number, family in sorted(bloch_families.items()):
             #print(family_number)
             #print(family)

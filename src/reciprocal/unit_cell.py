@@ -481,8 +481,6 @@ class UnitCell():
                 n_grid_points = [constraint['value'][0], constraint['value'][1]]
             except:
                 n_grid_points = [constraint['value'], constraint['value']]
-        print("n grid points:")
-        print(n_grid_points)
         if n_grid_points[0] == 0:
             n_grid_points[0] = 1
         if n_grid_points[1] == 0:
