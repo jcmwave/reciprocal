@@ -81,6 +81,21 @@ class KSpace():
         else:
             self.symmetry = None
 
+    def set_symmetry(self, symmetry):
+        """
+        Parameters
+        ----------
+        symmetry: string
+        """
+        sym = Symmetry.from_string(symmetry)
+        if periodic_sampler is not None:
+            lattice_sym = periodic_sampler.lattice.unit_cell.symmetry()
+            if lattice_sym != sym:
+                raise ValueError("symmetry {}".format(sym)+
+                                 "is not compatible with lattice symmetry"+
+                                 " {}".format(lattice_sym))
+        self.symmetry = sym
+
     def calc_symmetry_cone(self):
         """
         calculate the 3 points of the symmetry wedge.
@@ -145,6 +160,12 @@ class KSpace():
         """
         creates a periodic sampler using a Lattice (lattice.py) object.
         """
+        if self.symmetry is not None:
+            lattice_sym = lattice.unit_cell.symmetry()
+            if lattice_sym != self.symmetry:
+                raise ValueError("lattice symmetry {}".format(lattice_sym)+
+                                 "is not compatible with kspace symmetry"+
+                                 " {}".format(self.symmetry))
         self.periodic_sampler = PeriodicSampler(lattice, self)
 
 

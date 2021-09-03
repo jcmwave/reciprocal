@@ -41,7 +41,6 @@ def validate_symmetry(symmetry):
     return symmetry in names
 
 
-
 class Symmetry(object):
     """
     class for obtaining the number of reflection and rotations for
@@ -66,6 +65,7 @@ class Symmetry(object):
 
     def reduce(self):
         reducible = {PointSymmetry.D2: PointSymmetry.C2,
+                     PointSymmetry.D3: PointSymmetry.C3,
                      PointSymmetry.D4: PointSymmetry.C4,
                      PointSymmetry.D6: PointSymmetry.C6}
 
@@ -73,6 +73,39 @@ class Symmetry(object):
             raise ValueError("cannot reduce symmetry: {}".format(self.group))
         else:
             return Symmetry(reducible[self.group])
+
+    def compatible(self, other):
+        """Compares if one symmetries are a multiple of one another
+
+
+        Parameters
+        ----------
+        other: Symmetry
+            A different Symmetry to compare compatibility to
+
+
+        Returns
+        -------
+        bool
+            compatibility of symmetries
+        """
+        if self.group == other.group:
+            return True
+
+        #diagonal and horizontal reflections are only compatible with themselves
+        functions = [Symmetry.get_n_reflections_y, Symmetry.get_n_reflections_x,
+                     Symmetry.get_n_reflections_xy]
+
+        for func in functions:
+            if func(self) != func(other):
+                return False
+
+        n_rot_self = self.get_n_rotations()
+        n_rot_other = other.get_n_rotations()
+        if n_rot_self % n_rot_other == 0 or n_rot_other % n_rot_self == 0:
+            return True
+        return False
+
 
     def get_n_symmetry_ops(self):
         """
@@ -88,6 +121,7 @@ class Symmetry(object):
                      PointSymmetry.C4:4,
                      PointSymmetry.C6:6,
                      PointSymmetry.D2:4,
+                     PointSymmetry.D3:6,
                      PointSymmetry.D4:8,
                      PointSymmetry.D6:12}
         return n_sym_ops[self.group]
@@ -106,6 +140,7 @@ class Symmetry(object):
                      PointSymmetry.C4:4,
                      PointSymmetry.C6:6,
                      PointSymmetry.D2:2,
+                     PointSymmetry.D3:3,
                      PointSymmetry.D4:4,
                      PointSymmetry.D6:6}
         return rotations[self.group]
@@ -124,6 +159,7 @@ class Symmetry(object):
                        PointSymmetry.C4:0,
                        PointSymmetry.C6:0,
                        PointSymmetry.D2:1,
+                       PointSymmetry.D3:1,
                        PointSymmetry.D4:1,
                        PointSymmetry.D6:1}
         return reflections[self.group]
@@ -142,6 +178,7 @@ class Symmetry(object):
                        PointSymmetry.C4:0,
                        PointSymmetry.C6:0,
                        PointSymmetry.D2:0,
+                       PointSymmetry.D3:0,
                        PointSymmetry.D4:0,
                        PointSymmetry.D6:0}
         return reflections[self.group]
@@ -160,6 +197,7 @@ class Symmetry(object):
                        PointSymmetry.C4:0,
                        PointSymmetry.C6:0,
                        PointSymmetry.D2:0,
+                       PointSymmetry.D3:0,
                        PointSymmetry.D4:0,
                        PointSymmetry.D6:0}
         return reflections[self.group]
@@ -175,6 +213,7 @@ class Symmetry(object):
                  PointSymmetry.C4:2.*np.pi/4.0,
                  PointSymmetry.C6:2.*np.pi/6.0,
                  PointSymmetry.D2:2.*np.pi/4.0,
+                 PointSymmetry.D3:2.*np.pi/6.0,
                  PointSymmetry.D4:2.*np.pi/8.0,
                  PointSymmetry.D6:2.*np.pi/12.0}
         if self.group in angle:

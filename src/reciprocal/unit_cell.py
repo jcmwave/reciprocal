@@ -561,6 +561,27 @@ class UnitCell():
         return ipoly_samp
         #self.sampling = ipoly_samp
 
+    def symmetry(self):
+        """
+        Return the maximum point symmetry of the unit cell
+
+        Returns
+        -------
+        PointSymmetry
+            point symmetry of the unit cell
+        """
+        symmetries = {BravaisLattice.HEXAGON:PointSymmetry.D6,
+                      BravaisLattice.SQUARE:PointSymmetry.D4,
+                      BravaisLattice.RECTANGLE:PointSymmetry.D2,
+                      BravaisLattice.OBLIQUE:PointSymmetry.C2}
+
+
+
+        if self.lattice.bravais not in symmetries:
+            raise ValueError("could not determine symmetry of lattice "+
+                             "{}".format(self.lattice.bravais))
+        return Symmetry(symmetries[self.lattice.bravais])
+
     def symmetry_regions(self):
         """
         Return the point symmetry of the special points of the unit cell
