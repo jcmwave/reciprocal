@@ -94,6 +94,11 @@ class KSpace():
                 raise ValueError("symmetry {} ".format(sym)+
                                  "is not compatible with lattice symmetry"+
                                  " {}".format(lattice_sym))
+            if lattice_sym.get_n_symmetry_ops() < sym.get_n_symmetry_ops():
+                raise ValueError("kspace symmetry {} ".format(sym)+
+                                 "may not have a higher degree of symmetry "+
+                                 "than lattice symmetry"+
+                                 " {}".format(lattice_sym))
         self.symmetry = sym
 
     def calc_symmetry_cone(self):
@@ -166,6 +171,11 @@ class KSpace():
                 raise ValueError("lattice symmetry {} ".format(lattice_sym)+
                                  "is not compatible with kspace symmetry"+
                                  " {}".format(self.symmetry))
+            if lattice_sym.get_n_symmetry_ops() < self.symmetry.get_n_symmetry_ops():
+                raise ValueError("kspace symmetry {} ".format(self.symmetry)+
+                                  "may not have a higher degree of symmetry "+
+                                  "than lattice symmetry"+
+                                  " {}".format(lattice_sym))
         self.periodic_sampler = PeriodicSampler(lattice, self)
 
 
