@@ -108,7 +108,17 @@ class Symmetry(object):
 
         n_rot_self = self.get_n_rotations()
         n_rot_other = other.get_n_rotations()
-        if n_rot_self % n_rot_other == 0 or n_rot_other % n_rot_self == 0:
+        if n_rot_other > 1:
+            multiple_of_other = n_rot_self % n_rot_other == 0
+        else:
+            multiple_of_other = False
+        if n_rot_self > 1:
+            multiple_of_self = n_rot_other % n_rot_self == 0
+        else:
+            multiple_of_self = False
+
+
+        if multiple_of_other or multiple_of_self:
             return True
         return False
 
@@ -164,10 +174,10 @@ class Symmetry(object):
                        PointSymmetry.C3:0,
                        PointSymmetry.C4:0,
                        PointSymmetry.C6:0,
-                       PointSymmetry.D2:1,
-                       PointSymmetry.D3:1,
-                       PointSymmetry.D4:1,
-                       PointSymmetry.D6:1}
+                       PointSymmetry.D2:0,
+                       PointSymmetry.D3:0,
+                       PointSymmetry.D4:0,
+                       PointSymmetry.D6:0}
         return reflections[self.group]
 
     def get_n_reflections_x(self):
@@ -183,10 +193,10 @@ class Symmetry(object):
                        PointSymmetry.C3:0,
                        PointSymmetry.C4:0,
                        PointSymmetry.C6:0,
-                       PointSymmetry.D2:0,
-                       PointSymmetry.D3:0,
-                       PointSymmetry.D4:0,
-                       PointSymmetry.D6:0}
+                       PointSymmetry.D2:1,
+                       PointSymmetry.D3:1,
+                       PointSymmetry.D4:1,
+                       PointSymmetry.D6:1}
         return reflections[self.group]
 
     def get_n_reflections_xy(self):
@@ -221,7 +231,8 @@ class Symmetry(object):
                  PointSymmetry.D2:2.*np.pi/4.0,
                  PointSymmetry.D3:2.*np.pi/6.0,
                  PointSymmetry.D4:2.*np.pi/8.0,
-                 PointSymmetry.D6:2.*np.pi/12.0}
+                 PointSymmetry.D6:2.*np.pi/12.0,
+                 PointSymmetry.SIGMA_V:2.*np.pi/2.0}
         if self.group in angle:
             return angle[self.group]
         raise ValueError("symmetry {}".format(self.group) +
