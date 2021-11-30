@@ -515,9 +515,12 @@ class Interpolator():
         """
         Parameters
         ----------
-        kspace: dispersion.kspace.KSpace
+        kspace: reciprocal.kspace.KSpace
             reference to parent kspace
-
+        sample_points: reciprocal.kvector.KVectorGroup
+            the points in kpsace to interpolate over
+        values: <N,1> np.ndarray of floats
+            the function values to interpolate
         """
         self.kspace = kspace
         self.sample_points = sample_points
