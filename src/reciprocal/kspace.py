@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from numpy.lib.scimath import sqrt as csqrt
 import scipy.spatial
+from abc import ABC
 from reciprocal.symmetry import Symmetry, SpecialPoint
 from reciprocal.utils import (apply_symmetry_operators, order_lexicographically,
                               lies_on_poly, lies_on_vertex)
@@ -75,6 +76,7 @@ class KSpace():
         self.symmetry_cone = None
         self.sample_sets = []
         self.periodic_sampler = None
+        self.regular_sampler = RegularSampler(self)
         if symmetry is not None:
             self.symmetry = Symmetry.from_string(symmetry)
             self.calc_symmetry_cone()
@@ -178,8 +180,154 @@ class KSpace():
                                   " {}".format(lattice_sym))
         self.periodic_sampler = PeriodicSampler(lattice, self)
 
+class Sampler(ABC):
+    """ abstract base class for Sampling objects
 
-class PeriodicSampler():
+    """
+
+    def __init__(self, kspace):
+        self.kspace = kspace
+
+    def test_outside_symmetry_cone(self, trial_point,opening_angle):
+        tol = 1e-3
+        #if trial_point[1]> trial_point[0]*np.tan(opening_angle)+tol:
+        #    return True
+        angle = np.angle(trial_point[0]+1j*trial_point[1])
+        if angle<-tol or angle>opening_angle+tol:
+            return True
+        ktrans_sq = trial_point[0]**2 + trial_point[1]**2
+        if self.kspace.fermi_radius**2 - ktrans_sq < 0.0:
+            return True
+        return False
+
+class PseudoRandomSampler(Sampler):
+
+    """
+    class to obtain a psuedo-random k space sampling
+
+    kspace(Kspace): reference to parent kspace
+    """
+
+    def __init__(self, kspace):
+        """
+        Parameters
+        ----------
+        kspace: dispersion.kspace.KSpace
+            reference to parent kspace
+        """
+        super().__init__(kspace)
+
+
+class RegularSampler(Sampler):
+
+    """
+    class to obtain a k space sampling on a regular grid
+
+    kspace(Kspace): reference to parent kspace
+    """
+
+    def __init__(self, kspace):
+        """
+        Parameters
+        ----------
+        kspace: dispersion.kspace.KSpace
+            reference to parent kspace
+        """
+        super().__init__(kspace)
+
+    def sample(self, grid_type='cartesian', constraint=None, shifted=False,
+               cutoff_tol=1e-5, restrict_to_sym_cone=False):
+        if grid_type == 'cartesian':
+            all_points = self._sample_cartesian(constraint, shifted, cutoff_tol,
+                                           restrict_to_sym_cone)
+
+        return all_points
+
+    def _npoints_from_constraint(self, vector_lengths, constraint):
+        """
+        Return number of k space sampling points based on constraint
+
+        Parameters
+        ----------
+        constraint: dict
+            constraints for number of points
+
+        Returns
+        -------
+        int
+            number of grid points
+        """
+        if constraint is None:
+            constraint = {'type':'n_points', 'value':5}
+        if constraint['type'] == "density":
+            density = constraint['value']
+            n_grid_points = [int(density/vector_lengths[0]),
+                             int(density/vector_lengths[1])]
+        elif constraint['type'] == 'max_length':
+            max_length = constraint['value']
+            n_grid_points = [int(vector_lengths[0]/max_length),
+                             int(vector_lengths[1]/max_length)]
+        elif constraint['type'] == "n_points":
+            try:
+                n_grid_points = [constraint['value'][0], constraint['value'][1]]
+            except:
+                n_grid_points = [constraint['value'], constraint['value']]
+        if n_grid_points[0] == 0:
+            n_grid_points[0] = 1
+        if n_grid_points[1] == 0:
+            n_grid_points[1] = 1
+        return n_grid_points
+
+    def _sample_cartesian(self, constraint, shifted, cutoff_tol,
+                          restrict_to_sym_cone):
+        vector1 = np.array([self.kspace.fermi_radius, 0.])
+        vector2 = np.array([0., self.kspace.fermi_radius])
+        vector_lengths = np.array([self.kspace.fermi_radius, self.kspace.fermi_radius])
+        if restrict_to_sym_cone:
+            opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+        n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
+        #print("n_grid_points: {}".format(n_grid_points))
+        #n_unit_cells1 = int(np.ceil(self.kspace.fermi_radius/(vector_lengths[0])))
+        #print(n_unit_cells1)
+        range1 = range(-n_grid_points[0], n_grid_points[0]+1)
+        #n_unit_cells2 = int(np.ceil(self.kspace.fermi_radius/(vector_lengths[1])))
+        #print(n_unit_cells2)
+        #range2 = range(-n_unit_cells2, n_unit_cells2+1)
+        range2 = range(-n_grid_points[1], n_grid_points[1]+1)
+
+        all_points = []
+
+        vector1 /= n_grid_points[0]
+        vector2 /= n_grid_points[1]
+
+        if shifted:
+            central_point = 0.5*np.array([vector1, vector2])
+        else:
+            central_point = np.array([0., 0.])
+
+
+
+        for nx in range1:
+            for ny in range2:
+                trial_point = nx*vector1 + ny*vector2 + central_point
+                length = np.linalg.norm(trial_point)
+                if length > self.kspace.fermi_radius*(1-cutoff_tol):
+                    continue
+
+                if restrict_to_sym_cone:
+                    if self.test_outside_symmetry_cone(trial_point,
+                                                      opening_angle):
+                        continue
+
+                all_points.append(trial_point)
+
+        all_point_array = np.vstack(all_points)
+        all_point_array = order_lexicographically(all_point_array)
+        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+
+        return all_kvs
+
+class PeriodicSampler(Sampler):
 
     """
     class to obtain k space sampling based on periodic structures
@@ -197,8 +345,8 @@ class PeriodicSampler():
         kspace: dispersion.kspace.KSpace
             reference to parent kspace
         """
+        super().__init__(kspace)
         self.lattice = lattice
-        self.kspace = kspace
 
     def calc_woods_anomalies(self, order, n_refinements=0,
                              restrict_to_sym_cone=False):
@@ -403,17 +551,7 @@ class PeriodicSampler():
 
         return bloch_families, all_kvs
 
-    def test_outside_symmetry_cone(self,trial_point,opening_angle):
-        tol = 1e-3
-        #if trial_point[1]> trial_point[0]*np.tan(opening_angle)+tol:
-        #    return True
-        angle = np.angle(trial_point[0]+1j*trial_point[1])
-        if angle<-tol or angle>opening_angle+tol:
-            return True
-        ktrans_sq = trial_point[0]**2 + trial_point[1]**2
-        if self.kspace.fermi_radius**2 - ktrans_sq < 0.0:
-            return True
-        return False
+
 
     def plotSymmetryFamilies(self,ax,n='all',color=None):
         if self.symmetry_families is None:

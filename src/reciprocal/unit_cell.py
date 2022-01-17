@@ -52,7 +52,7 @@ def make_perpendicular_lines(vec1, vec2):
 
     Returns
     -------
-    list of (2,) tuple containing (float, (2,2) <np.double>np.array)
+    list of (2,) tuple containing (float, (2,3) <np.double>np.array)
         the distance to the midpoint and vertices of the perpendicular line
     """
     # Create lines perpendicular to vectors pointing to closest lattice cites
@@ -97,15 +97,20 @@ def find_intersections(vertices, n_closest):
             my_intersection = np.array([inter[0], inter[1], 0.])
             distance = np.linalg.norm(my_intersection)
             for ic in range(n_closest):
+                if np.isclose(distance, closest[ic]):
+                    break
                 if distance < closest[ic]:
                     closest[ic] = distance
                     break
-                if np.isclose(distance, closest[ic]):
-                    break
 
-            if np.all(distance > closest+1e-6):
-                   continue
+
+
+            if np.all(distance > closest*(1.+1e-9)):
+                continue
             intersections.append([distance, my_intersection])
+
+
+
     return intersections, closest
 
 def split_intersections(intersections, closest):
@@ -132,7 +137,7 @@ def split_intersections(intersections, closest):
     keep_intersections = []
     for i_inter, inter in enumerate(intersections):
         distance = inter[0]
-        if np.any(distance> closest+1e-6):
+        if np.any(distance> closest*(1+1e-9)):
             keep_intersections.append(inter)
             continue
         final_intersections.append(inter[1])
