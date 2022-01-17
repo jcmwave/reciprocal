@@ -75,3 +75,6 @@ def test_reciprocal_vectors():
     assert abs(rlat.vec1[1]-(-0.0036276)) < tol
     assert abs(rlat.vec2[0]-0.) < tol
     assert abs(rlat.vec2[1]-0.0072552) < tol
+
+def test_lattice():
+    lat = lattice.Lattice(1000., 1000., 60.)

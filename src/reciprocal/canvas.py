@@ -56,6 +56,18 @@ class Canvas():
         self.colors['vector'] = 'g'
 
     def update_bbox(self, box):
+        """
+        update the bounding box of the canvas
+
+        sets the current x and y axis limits to those given by the box in the
+        format ((x_min, y_min), (x_max, y_max)), only if the new values would
+        lead to the box increasing
+
+        Paraeters
+        ---------
+        box: (tuple(2),tuple(2))
+            the bounding box
+        """
         for i in range(2):
             for j in range(2):
                 if i == 0:
@@ -64,8 +76,8 @@ class Canvas():
                 if i ==1:
                     if box[i][j] > self.bbox[i][j]:
                         self.bbox[i][j] = box[i][j]
-        plt.xlim([self.bbox[0][0], self.bbox[1][0]])
-        plt.ylim([self.bbox[0][1], self.bbox[1][1]])
+        self.ax.set_xlim([self.bbox[0][0], self.bbox[1][0]])
+        self.ax.set_ylim([self.bbox[0][1], self.bbox[1][1]])
 
     def plot_vectors(self, plot_obj):
         """
