@@ -556,7 +556,8 @@ class Canvas():
         if legend:
             plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
 
-    def plot_point_sampling(self, points, plot_n_points='all', color=None):
+    def plot_point_sampling(self, points, plot_n_points='all', color=None,
+                            marker='o', label=""):
         """
         plot a point sampling
 
@@ -574,25 +575,31 @@ class Canvas():
 
         if plot_n_points=='all':
             try:
-                plot_n_points = len(points.shape[0])
+                plot_n_points = points.shape[0]
             except AttributeError:
                 plot_n_points = points.n_rows
 
         norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
         plt.sca(self.ax)
+        point_colors = []
         for point_number in range(plot_n_points):
-            try:
-                point = points[point_number, :]
-            except TypeError:
-                point = points.k[point_number, :]
             if color is None:
                 point_color = choose_color(point_number, plot_n_points)
             else:
                 point_color = color
+            point_colors.append(point_color)
             #label = " {}".format(family_number+1)
-            plt.scatter(point[0], point[1], color=point_color)
+        try:
+            points = points.k
+        except TypeError:
+            pass
+
+
+        handle = plt.scatter(points[:, 0], points[:, 1], color=point_colors,
+                    marker=marker, label=label)
         #if legend:
         #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
+        return handle
 
     def plot_interpolation(self, kpoints, values):
         plt.sca(self.ax)
