@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib as mpl
 from matplotlib import cm
+from matplotlib.patches import Wedge, Circle, Rectangle
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 from numpy.lib.scimath import sqrt as csqrt
@@ -240,7 +241,9 @@ class RegularSampler(Sampler):
         if grid_type == 'cartesian':
             all_points = self._sample_cartesian(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone)
-
+        if grid_type == 'circular':
+            all_points = self._sample_circular(constraint, shifted, cutoff_tol,
+                                           restrict_to_sym_cone)
         return all_points
 
     def _npoints_from_constraint(self, vector_lengths, constraint):
@@ -261,52 +264,109 @@ class RegularSampler(Sampler):
             constraint = {'type':'n_points', 'value':5}
         if constraint['type'] == "density":
             density = constraint['value']
-            n_grid_points = [int(density/vector_lengths[0]),
-                             int(density/vector_lengths[1])]
+            max_length = 1/(np.sqrt(density)*2)
+            n_grid_points = []
+            for length in vector_lengths:
+                n_grid_points.append(int(length/max_length))
         elif constraint['type'] == 'max_length':
             max_length = constraint['value']
-            n_grid_points = [int(vector_lengths[0]/max_length),
-                             int(vector_lengths[1]/max_length)]
+            n_grid_points = []
+            for length in vector_lengths:
+                n_grid_points.append(int(length/max_length))
         elif constraint['type'] == "n_points":
             try:
                 n_grid_points = [constraint['value'][0], constraint['value'][1]]
             except:
                 n_grid_points = [constraint['value'], constraint['value']]
-        if n_grid_points[0] == 0:
-            n_grid_points[0] = 1
-        if n_grid_points[1] == 0:
-            n_grid_points[1] = 1
+        for ii, gp in enumerate(n_grid_points):
+            if gp == 0:
+                n_grid_points[ii] = 1
         return n_grid_points
 
-    def _sample_cartesian(self, constraint, shifted, cutoff_tol,
+    def _sample_circular(self, constraint, shifted, cutoff_tol,
                           restrict_to_sym_cone):
+        vector1 = np.array([self.kspace.fermi_radius, 0.])
+        vector_lengths = np.array([self.kspace.fermi_radius])
+
+        if restrict_to_sym_cone:
+            opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+        n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
+        radial_range = range(0, n_grid_points[0])
+
+        all_points = []
+        weighting = []
+        artists = []
+        rad_spacing = vector_lengths[0]/(n_grid_points[0]-0.5)
+
+        if shifted:
+            raise ValueError("shifted no supported for circular grids")
+
+        total_area = np.pi*self.kspace.fermi_radius**2
+
+        for n_r in radial_range:
+            if n_r == 0:
+                all_points.append(np.array([0., 0.]))
+                center_circle_area = np.pi*(rad_spacing/2.)**2
+                weighting.append(center_circle_area/total_area)
+                artists.append(Circle((0.,0.), radius=rad_spacing/2., fill=False, edgecolor='k'))
+                continue
+            radius = rad_spacing*n_r
+            upper_radius = rad_spacing*(n_r+0.5)
+            lower_radius = rad_spacing*(n_r-0.5)
+            circumference = np.pi*2*radius
+            n_phis = self._npoints_from_constraint([circumference], constraint)
+            phis = np.linspace(0, 360, n_phis[0])[:-1]
+            if phis.size == 1:
+                phi_spacing = 360.
+            else:
+                phi_spacing = phis[1]-phis[0]
+            if restrict_to_sym_cone:
+                phis = phis[phis<=opening_angle]
+            for phi in phis:
+                x = radius*np.cos(np.radians(phi))
+                y = radius*np.sin(np.radians(phi))
+                trial_point = np.array([x, y])
+                length = np.linalg.norm(trial_point)
+                if length > self.kspace.fermi_radius*(1-cutoff_tol):
+                    pass
+                    #continue
+                wedge_area = 0.5*(upper_radius**2-lower_radius**2)*np.radians(phi_spacing)
+                weighting.append(wedge_area/total_area)
+                all_points.append(trial_point)
+                wedge = Wedge(np.array([0., 0.]), upper_radius,
+                              phi-phi_spacing*0.5, phi+phi_spacing*0.5,
+                              width=upper_radius-lower_radius, fill=False)
+                artists.append(wedge)
+
+        all_point_array = np.vstack(all_points)
+        all_point_array = order_lexicographically(all_point_array)
+        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+        weighting_array = np.array(weighting)
+        return all_kvs, weighting_array
+
+    def _sample_cartesian(self, constraint, shifted, cutoff_tol,
+                         restrict_to_sym_cone):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector2 = np.array([0., self.kspace.fermi_radius])
         vector_lengths = np.array([self.kspace.fermi_radius, self.kspace.fermi_radius])
         if restrict_to_sym_cone:
             opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
-        #print("n_grid_points: {}".format(n_grid_points))
-        #n_unit_cells1 = int(np.ceil(self.kspace.fermi_radius/(vector_lengths[0])))
-        #print(n_unit_cells1)
         range1 = range(-n_grid_points[0], n_grid_points[0]+1)
-        #n_unit_cells2 = int(np.ceil(self.kspace.fermi_radius/(vector_lengths[1])))
-        #print(n_unit_cells2)
-        #range2 = range(-n_unit_cells2, n_unit_cells2+1)
         range2 = range(-n_grid_points[1], n_grid_points[1]+1)
 
         all_points = []
-
+        weighting = []
+        artists = []
+        total_area = np.pi*self.kspace.fermi_radius**2
         vector1 /= n_grid_points[0]
         vector2 /= n_grid_points[1]
+        vector_lengths /= n_grid_points
 
         if shifted:
             central_point = 0.5*np.array([vector1, vector2])
         else:
             central_point = np.array([0., 0.])
-
-
-
         for nx in range1:
             for ny in range2:
                 trial_point = nx*vector1 + ny*vector2 + central_point
@@ -318,14 +378,17 @@ class RegularSampler(Sampler):
                     if self.test_outside_symmetry_cone(trial_point,
                                                       opening_angle):
                         continue
-
+                rect_center = (nx-0.5)*vector1 + (ny-0.5)*vector2 + central_point
+                square = Rectangle(rect_center, vector_lengths[0], vector_lengths[1])
+                artists.append(square)
+                weighting.append(vector_lengths[0]*vector_lengths[1]/total_area)
                 all_points.append(trial_point)
 
         all_point_array = np.vstack(all_points)
         all_point_array = order_lexicographically(all_point_array)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
-
-        return all_kvs
+        weighting_array = np.array(weighting)
+        return all_kvs, weighting_array
 
 class PeriodicSampler(Sampler):
 
