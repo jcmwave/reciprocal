@@ -127,7 +127,7 @@ class Canvas():
 
 
 
-    def _get_hex_patch(self, vectors,
+    def _get_hex_patch(self, vectors, lw=2.,
                        facecolor=[1.0, 1.0, 1.0, 0.0],
                        edgecolor=[0.0, 0.0, 0.0, 0.3],
                        pos=np.zeros(2)):
@@ -141,10 +141,11 @@ class Canvas():
                               radius=polygon_radius,
                               orientation=orientation,
                               facecolor=facecolor,
-                              edgecolor=edgecolor
+                              edgecolor=edgecolor,
+                              lw=lw
                               )
 
-    def _get_rect_patch(self, vectors,
+    def _get_rect_patch(self, vectors, lw=2.,
                         facecolor=[1.0, 1.0, 1.0, 0.0],
                         edgecolor=[0.0, 0.0, 0.0, 0.3],
                         pos=np.zeros(2)):
@@ -157,7 +158,7 @@ class Canvas():
                          edgecolor=edgecolor
                          )
 
-    def _get_poly_patch(self, vertices,
+    def _get_poly_patch(self, vertices, lw=2.0,
                         facecolor=[1.0, 1.0, 1.0, 0.0],
                         edgecolor=[0.0, 0.0, 0.0, 0.3],
                         pos=np.zeros(2)):
@@ -165,10 +166,11 @@ class Canvas():
         #    vertex += pos
         return Polygon(vertices[:,:2]+pos,
                         closed=True,
+                        lw=lw,
                         facecolor=facecolor,
                         edgecolor=edgecolor)
 
-    def _get_point_patch(self, vertices,
+    def _get_point_patch(self, vertices, lw=2.0,
                          facecolor=[0.0, 0.0, 0.0, 1.0],
                          edgecolor=[0.0, 0.0, 0.0, 1.0],
                          pos=np.zeros(2)):
@@ -182,7 +184,7 @@ class Canvas():
         #lv2 = np.linalg.norm(vectors.vec2)
         #maxl = np.max([lv1, lv2])
         radius = maxl*0.05
-        return Circle(xy=pos, radius=radius,
+        return Circle(xy=pos, radius=radius, lw=2.0,
                       facecolor=facecolor,
                       edgecolor=edgecolor)
 
@@ -389,7 +391,7 @@ class Canvas():
     def _plot_lattice(self, lattice, patch_generator,
                       orders=None, label_orders=False,
                       facecolor=[1., 1., 1., 0.],
-                      increase_bbox=True):
+                      increase_bbox=True, lw=2.0):
         #shape = lattice.unit_cell.shape
         vec1 = lattice.vectors.vec1
         vec2 = lattice.vectors.vec2
@@ -416,7 +418,7 @@ class Canvas():
                                             pos, xi, yi, lv_max, bbox)
 
             patch = patch_generator(lattice.unit_cell.vertices, pos=pos,
-                                    facecolor=facecolor)
+                                    facecolor=facecolor[row, :], lw=lw)
             patches.append(patch)
             if label_orders:
                 Canvas.plot_order(pos, xi, yi)
