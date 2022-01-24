@@ -237,13 +237,13 @@ class RegularSampler(Sampler):
         super().__init__(kspace)
 
     def sample(self, grid_type='cartesian', constraint=None, shifted=False,
-               cutoff_tol=1e-5, restrict_to_sym_cone=False):
+               cutoff_tol=1e-5, restrict_to_sym_cone=False, return_artists=False):
         if grid_type == 'cartesian':
             all_points = self._sample_cartesian(constraint, shifted, cutoff_tol,
-                                           restrict_to_sym_cone)
+                                           restrict_to_sym_cone, return_artists)
         if grid_type == 'circular':
             all_points = self._sample_circular(constraint, shifted, cutoff_tol,
-                                           restrict_to_sym_cone)
+                                           restrict_to_sym_cone, return_artists)
         return all_points
 
     def _npoints_from_constraint(self, vector_lengths, constraint):
@@ -284,7 +284,7 @@ class RegularSampler(Sampler):
         return n_grid_points
 
     def _sample_circular(self, constraint, shifted, cutoff_tol,
-                          restrict_to_sym_cone):
+                          restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector_lengths = np.array([self.kspace.fermi_radius])
 
@@ -342,10 +342,13 @@ class RegularSampler(Sampler):
         all_point_array = order_lexicographically(all_point_array)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
         weighting_array = np.array(weighting)
-        return all_kvs, weighting_array
+        if return_artists:
+            return all_kvs, weighting_array, artists
+        else:
+            return all_kvs, weighting_array
 
     def _sample_cartesian(self, constraint, shifted, cutoff_tol,
-                         restrict_to_sym_cone):
+                         restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector2 = np.array([0., self.kspace.fermi_radius])
         vector_lengths = np.array([self.kspace.fermi_radius, self.kspace.fermi_radius])
@@ -388,7 +391,10 @@ class RegularSampler(Sampler):
         all_point_array = order_lexicographically(all_point_array)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
         weighting_array = np.array(weighting)
-        return all_kvs, weighting_array
+        if return_artists:
+            return all_kvs, weighting_array, artists
+        else:
+            return all_kvs, weighting_array
 
 class PeriodicSampler(Sampler):
 
