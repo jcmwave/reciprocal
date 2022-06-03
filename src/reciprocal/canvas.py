@@ -9,6 +9,7 @@ import scipy.spatial
 from reciprocal.lattice import Lattice, LatticeVectors
 from reciprocal.unit_cell import UnitCell
 from reciprocal.symmetry import SpecialPoint
+from reciprocal.kspace import KSpace
 
 def choose_color(item, n_items):
     """
@@ -390,7 +391,8 @@ class Canvas():
 
     def _plot_lattice(self, lattice, patch_generator,
                       orders=None, label_orders=False,
-                      facecolor=[1., 1., 1., 0.],
+                      facecolor=np.array([1., 1., 1., 0.]),
+                      edgecolor=np.array([0., 0., 0., 1.]),
                       increase_bbox=True, lw=2.0):
         #shape = lattice.unit_cell.shape
         vec1 = lattice.vectors.vec1
@@ -416,9 +418,17 @@ class Canvas():
             if increase_bbox:
                 bbox = Canvas.increase_bbox(first_orders, second_orders,
                                             pos, xi, yi, lv_max, bbox)
-
+            if facecolor.shape[0] == orders.shape[0]:
+                fc = facecolor[row, :]
+            else:
+                fc = facecolor
+            if edgecolor.shape[0] == orders.shape[0]:
+                ec = edgecolor[row, :]
+            else:
+                ec = edgecolor
             patch = patch_generator(lattice.unit_cell.vertices, pos=pos,
-                                    facecolor=facecolor[row, :], lw=lw)
+                                    facecolor=fc, lw=lw,
+                                    edgecolor=ec)
             patches.append(patch)
             if label_orders:
                 Canvas.plot_order(pos, xi, yi)
@@ -499,9 +509,12 @@ class Canvas():
                  clip_on=True)
 
     def plot_fermi_circle(self, kspace):
-        if kspace.fermi_radius is None:
-            raise ValueError("cannot plot fermi circle: fermi radius not set")
-        radius = kspace.fermi_radius
+        if isinstance(kspace, KSpace):
+            if kspace.fermi_radius is None:
+                raise ValueError("cannot plot fermi circle: fermi radius not set")
+            radius = kspace.fermi_radius
+        else:
+            radius = kspace
         circle_patch = Circle((0, 0), radius=radius,
                                   edgecolor='k', linestyle='-',
                                   linewidth=2.0, fill=False)
