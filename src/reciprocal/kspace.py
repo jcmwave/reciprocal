@@ -141,8 +141,12 @@ class KSpace():
             if on_vertex:
                 points = np.array([[0., 0.]])
             elif lies_on_poly(kxy, self.symmetry_cone, closed=False):
+                try:
+                    reduced_sym = self.symmetry.reduce()
+                except ValueError:
+                    reduced_sym = self.symmetry
                 points, operators = apply_symmetry_operators(kxy,
-                                                             self.symmetry.reduce())
+                                                             reduced_sym)
             else:
                 points, operators = apply_symmetry_operators(kxy, self.symmetry)
             for row in range(points.shape[0]):
@@ -287,9 +291,10 @@ class RegularSampler(Sampler):
                           restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector_lengths = np.array([self.kspace.fermi_radius])
-
         if restrict_to_sym_cone:
             opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+        else:
+            opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
         radial_range = range(0, n_grid_points[0])
 
@@ -301,27 +306,34 @@ class RegularSampler(Sampler):
         if shifted:
             raise ValueError("shifted no supported for circular grids")
 
-        total_area = np.pi*self.kspace.fermi_radius**2
+        total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
 
         for n_r in radial_range:
             if n_r == 0:
                 all_points.append(np.array([0., 0.]))
-                center_circle_area = np.pi*(rad_spacing/2.)**2
+                center_circle_area = np.pi*(rad_spacing/2.)**2*opening_angle/(2*np.pi)
                 weighting.append(center_circle_area/total_area)
-                artists.append(Circle((0.,0.), radius=rad_spacing/2., fill=False, edgecolor='k'))
+                if np.isclose(opening_angle, np.pi*2.):
+                    artists.append(Circle((0.,0.), radius=rad_spacing/2., fill=False, edgecolor='k'))
+                else:
+                    artists.append(Wedge((0.,0.), rad_spacing/2., 0.,
+                                    np.degrees(opening_angle),
+                                    fill=False, edgecolor='k'))
                 continue
             radius = rad_spacing*n_r
             upper_radius = rad_spacing*(n_r+0.5)
             lower_radius = rad_spacing*(n_r-0.5)
-            circumference = np.pi*2*radius
+            circumference = opening_angle*radius
             n_phis = self._npoints_from_constraint([circumference], constraint)
-            phis = np.linspace(0, 360, n_phis[0])[:-1]
+            phis = np.linspace(0, np.degrees(opening_angle), n_phis[0])
+            if phis.size > 1:
+                phis = phis[:-1]
             if phis.size == 1:
-                phi_spacing = 360.
+                phi_spacing = np.degrees(opening_angle)
             else:
                 phi_spacing = phis[1]-phis[0]
             if restrict_to_sym_cone:
-                phis = phis[phis<=opening_angle]
+                phis = phis[phis<=np.degrees(opening_angle)]
             for phi in phis:
                 x = radius*np.cos(np.radians(phi))
                 y = radius*np.sin(np.radians(phi))
@@ -354,6 +366,8 @@ class RegularSampler(Sampler):
         vector_lengths = np.array([self.kspace.fermi_radius, self.kspace.fermi_radius])
         if restrict_to_sym_cone:
             opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+        else:
+            opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
         range1 = range(-n_grid_points[0], n_grid_points[0]+1)
         range2 = range(-n_grid_points[1], n_grid_points[1]+1)
@@ -361,13 +375,13 @@ class RegularSampler(Sampler):
         all_points = []
         weighting = []
         artists = []
-        total_area = np.pi*self.kspace.fermi_radius**2
+        total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
         vector1 /= n_grid_points[0]
         vector2 /= n_grid_points[1]
         vector_lengths /= n_grid_points
 
         if shifted:
-            central_point = 0.5*np.array([vector1, vector2])
+            central_point = 0.5*(vector1 + vector2)
         else:
             central_point = np.array([0., 0.])
         for nx in range1:
