@@ -343,6 +343,7 @@ class RegularSampler(Sampler):
                     pass
                     #continue
                 wedge_area = 0.5*(upper_radius**2-lower_radius**2)*np.radians(phi_spacing)
+                #print(upper_radius, lower_radius, phi_spacing, wedge_area/total_area)
                 weighting.append(wedge_area/total_area)
                 all_points.append(trial_point)
                 wedge = Wedge(np.array([0., 0.]), upper_radius,
@@ -351,9 +352,11 @@ class RegularSampler(Sampler):
                 artists.append(wedge)
 
         all_point_array = np.vstack(all_points)
-        all_point_array = order_lexicographically(all_point_array)
+        all_point_array, sort_indices = order_lexicographically(all_point_array,
+                                                       return_sort_indices=True)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
         weighting_array = np.array(weighting)
+        weighting_array = weighting_array[sort_indices]
         if return_artists:
             return all_kvs, weighting_array, artists
         else:
@@ -402,9 +405,11 @@ class RegularSampler(Sampler):
                 all_points.append(trial_point)
 
         all_point_array = np.vstack(all_points)
-        all_point_array = order_lexicographically(all_point_array)
+        all_point_array, sort_indices = order_lexicographically(all_point_array,
+                                                       return_sort_indices=True)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
         weighting_array = np.array(weighting)
+        weighting_array = weighting_array[sort_indices]
         if return_artists:
             return all_kvs, weighting_array, artists
         else:

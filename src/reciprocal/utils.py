@@ -159,7 +159,7 @@ def lies_on_vertex(point, named_vertices, rel_tol=1e-3):
             return (True, special_point)
     return (False, '')
 
-def order_lexicographically(points, start=0.0):
+def order_lexicographically(points, start=0.0, return_sort_indices=False):
     angle = np.angle( (points[:,0]+1j*points[:,1])*np.exp(1j*(np.pi+1e-3+start)))
     angle = np.round(angle, 3)
     radius = np.linalg.norm(points, axis=1)
@@ -172,7 +172,10 @@ def order_lexicographically(points, start=0.0):
     #pp.pprint(all_data)
     #pp.pprint("x, y, z, angle, radius")
     #pp.pprint(all_data[sort_indices, :])
-    return points[sort_indices, :]
+    if return_sort_indices:
+        return points[sort_indices, :], sort_indices
+    else:
+        return points[sort_indices, :]
 
 class BravaisLattice(Enum):
     HEXAGON = 0
