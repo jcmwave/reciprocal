@@ -616,6 +616,49 @@ class Canvas():
         #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
         return handle
 
+    def plot_point_sampling_weighted(self, points, weighting,
+                                    plot_n_points='all', marker='o', label=""):
+        """
+        plot a point sampling
+
+        Parameters
+        ----------
+        plot_n_points: int or str
+            how many points to plot
+        legend: bool
+            display legend
+
+        Returns
+        -------
+        None
+        """
+
+        if plot_n_points=='all':
+            try:
+                plot_n_points = points.shape[0]
+            except AttributeError:
+                plot_n_points = points.n_rows
+
+        norm = mpl.colors.Normalize(vmin=np.min(weighting),
+                                    vmax=np.max(weighting))
+        print(np.min(weighting), np.max(weighting))
+        plt.sca(self.ax)
+        point_colors = []
+        point_colors = weighting[:plot_n_points]
+
+        try:
+            points = points.k
+        except TypeError:
+            pass
+
+
+        handle = plt.scatter(points[:plot_n_points, 0], points[:plot_n_points, 1], c=point_colors,
+                    marker=marker, label=label, norm=norm)
+        #if legend:
+        #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
+        plt.colorbar()
+        return handle
+
     def plot_interpolation(self, kpoints, values):
         plt.sca(self.ax)
         xi = kpoints.k[:,[0,1]]
