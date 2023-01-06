@@ -4,9 +4,10 @@ from reciprocal.utils import (apply_symmetry_operators, lies_on_vertex, lies_on_
                               order_lexicographically)
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry
 from reciprocal.utils import BravaisLattice
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon, Circle
 import itertools
+from itertools import tee
 from collections import OrderedDict
 def line(p1, p2):
     A = (p1[1] - p2[1])
@@ -95,17 +96,22 @@ def find_intersections(vertices, n_closest):
         inter = intersection(L1, L2)
         if inter is not False:
             my_intersection = np.array([inter[0], inter[1], 0.])
-            distance = np.linalg.norm(my_intersection)
+            distance = np.round(np.linalg.norm(my_intersection), 9)
             for ic in range(n_closest):
-                if np.isclose(distance, closest[ic]):
+                if np.isclose(distance, closest[ic], rtol=1e-6):
                     break
                 if distance < closest[ic]:
                     closest[ic] = distance
                     break
-
-
-
-            if np.all(distance > closest*(1.+1e-9)):
+            if np.all(distance > closest*(1.)):
+                continue
+            valid = True
+            for i_inter in range(len(intersections)):
+                if (np.isclose(my_intersection[0], intersections[i_inter][1][0]) and
+                    np.isclose(my_intersection[1], intersections[i_inter][1][1])):
+                        valid = False
+                        break
+            if not valid:
                 continue
             intersections.append([distance, my_intersection])
 
@@ -477,10 +483,10 @@ class UnitCell():
         """
         if constraint is None:
             constraint = {'type':'n_points', 'value':5}
-        if constraint['type'] == "density":
-            density = constraint['value']
-            n_grid_points = [int(0.5*self.vectors.length1/density),
-                             int(0.5*self.vectors.length2/density)]
+        if constraint['type'] == "max_length":
+            max_length = constraint['max_length']
+            n_grid_points = [int(0.5*self.vectors.length1/max_length),
+                             int(0.5*self.vectors.length2/max_length)]
         elif constraint['type'] == "n_points":
             try:
                 n_grid_points = [constraint['value'][0], constraint['value'][1]]
@@ -512,7 +518,7 @@ class UnitCell():
         irreducible_path = Polygon(self.irreducible[:,:2],
                                    closed=True).get_path()
 
-
+        irreducible_vertices = np.hstack([irreducible_path.vertices, np.zeros((irreducible_path.vertices.shape[0], 1))])
         n_grid_points = self._npoints_from_constraint(constraint)
         if n_grid_points[0] == 1:
             vec1 = np.array([0.0, 0.0, 0.0])
@@ -534,7 +540,6 @@ class UnitCell():
 
         range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
         range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
-
         for nx in range(-range_lim1, range_lim1):
             for ny in range(-range_lim2, range_lim2):
                 trial_point = (nx*vec1 + ny*vec2)
@@ -548,7 +553,7 @@ class UnitCell():
                 if on_vertex:
                     if  not special_point is SpecialPoint.Y2:
                         ipoly_samp[special_point].append(trial_point)
-                elif lies_on_poly(trial_point, self.vertices):
+                elif lies_on_poly(trial_point, irreducible_vertices):
                     ipoly_samp[SpecialPoint.AXIS].append(trial_point)
                 else:
                     ipoly_samp[SpecialPoint.INTERIOR].append(trial_point)
@@ -563,6 +568,20 @@ class UnitCell():
 
         return ipoly_samp
         #self.sampling = ipoly_samp
+
+    def weight_irreducible_sampling(self, ipoly_sample):
+        n_points_total = 0
+        weights = []
+        max_sym = self.symmetry().get_n_symmetry_ops()
+        sym_regions = self.symmetry_regions()
+        for region, points in ipoly_sample.items():
+            n_points = points.shape[0]
+            n_points_total += n_points
+            point_symmetry = sym_regions[region]
+            weight = point_symmetry.get_n_symmetry_ops()/max_sym
+            weights += (weight*np.ones(n_points)).tolist()
+        weights = np.array(weights)#/n_points
+        return weights
 
     def symmetry(self):
         """

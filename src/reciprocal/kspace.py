@@ -1,10 +1,10 @@
 import numpy as np
-import matplotlib as mpl
+#import matplotlib as mpl
 from matplotlib import cm
 from matplotlib.patches import Wedge, Circle, Rectangle
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-from numpy.lib.scimath import sqrt as csqrt
+#import matplotlib.pyplot as plt
+#from matplotlib.patches import Polygon
+#from numpy.lib.scimath import sqrt as csqrt
 import scipy.spatial
 from abc import ABC
 from reciprocal.symmetry import Symmetry, SpecialPoint
@@ -35,9 +35,9 @@ def get_bloch_statistics(bloch_sampling):
         if isinstance(family, np.ndarray):
             n_siblings = family.shape[0]
         else:
-            n_sSiblings = family.k.shape[0]
-        n_points_total += nSiblings
-        family_sizes[key] = nSiblings
+            n_siblings = family.k.shape[0]
+        n_points_total += n_siblings
+        family_sizes[key] = n_siblings
     info['NKPoints'] = n_points_total
     info['FamilySizes'] = family_sizes
     info['Speedup'] = info['NKPoints']/info['NFamilies']
