@@ -358,6 +358,8 @@ class RegularSampler(Sampler):
         weighting_array = np.array(weighting)
         weighting_array = weighting_array[sort_indices]
         if return_artists:
+            artists = np.array(artists)
+            artists = artists[sort_indices]
             return all_kvs, weighting_array, artists
         else:
             return all_kvs, weighting_array
