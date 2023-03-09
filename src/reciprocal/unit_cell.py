@@ -544,7 +544,7 @@ class UnitCell():
             for ny in range(-range_lim2, range_lim2):
                 trial_point = (nx*vec1 + ny*vec2)
                 if shifted:
-                    trial_point += (0.5*vec1 + 0.5*vec2)
+                    trial_point += ((1./2.)*vec1 + (1./2.)*vec2)
                 if not irreducible_path.contains_point(trial_point,
                                                        radius=1e-7):
                     continue

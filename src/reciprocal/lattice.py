@@ -329,10 +329,10 @@ class Lattice():
                              " not understood. lattice type must be in range "+
                              "({})".format(valid_lattice_types))
         self.lattice_type = lattice_type
-        if lattice_vectors is None:
-            lattice_vectors = LatticeVectors(**lv_args)
-        else:
-            lattice_vectors = lattice_vectors
+        #if lattice_vectors is None:
+        #    lattice_vectors = LatticeVectors(**lv_args)
+        #else:
+        #    lattice_vectors = lattice_vectors
         self.vectors = lattice_vectors
         self.bravais =  self.determine_bravais_lattice()
         if self.lattice_type == 'real_space':
