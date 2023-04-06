@@ -6,11 +6,19 @@ from matplotlib.patches import Wedge, Circle, Rectangle
 #from matplotlib.patches import Polygon
 #from numpy.lib.scimath import sqrt as csqrt
 import scipy.spatial
+import shapely.geometry
+from shapely.geometry.point import Point
+from shapely.geometry.linestring import LineString
+from shapely.geometry.polygon import LinearRing, Polygon
+from descartes import PolygonPatch
 from abc import ABC
 from reciprocal.symmetry import Symmetry, SpecialPoint
 from reciprocal.utils import (apply_symmetry_operators, order_lexicographically,
                               lies_on_poly, lies_on_vertex)
 from reciprocal.kvector import KVectorGroup, BlochFamily
+import warnings
+from shapely.errors import ShapelyDeprecationWarning
+warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning) 
 #from kspacesampling import KVector
 #from kspacesampling import BrillouinZone
 #from kspacesampling import Symmetry
@@ -149,14 +157,61 @@ class KSpace():
                                                              reduced_sym)
             else:
                 points, operators = apply_symmetry_operators(kxy, self.symmetry)
-            for row in range(points.shape[0]):
-                point = points[row, :]
-                symmetry_groups[row].append(point)
+            for sym_row in range(points.shape[0]):
+                point = points[sym_row, :]
+                symmetry_groups[sym_row].append(point)
         for i_sym, point_list in enumerate(symmetry_groups):
             point_array = np.vstack(point_list)
+            #point_array = order_lexicographically(point_array)
             kvs = self.convert_to_KVectors(point_array, 1.0, 1)
             symmetry_groups[i_sym] = kvs
         return symmetry_groups
+
+    def symmetrise_sample_weighted(self, kv_group, weighting):
+        """
+        given a k-space sampling (KVectorGroup), return a list of KVectorGroups
+        which contain all the symmetry points for each.
+        """
+        n_points = kv_group.n_rows
+
+        opening_angle = self.symmetry.get_symmetry_cone_angle()
+
+        counter = 0
+        symmetry_groups = []
+        weight_groups = []
+
+        for i in range(self.symmetry.get_n_symmetry_ops()):
+            symmetry_groups.append([])
+            weight_groups.append([])
+        for row in range(n_points):
+            k = kv_group.k[row,:]
+            weight = weighting[row]
+            kxy = np.array(k[:2])
+            gamma_vertex = {SpecialPoint.GAMMA:np.array([0., 0., 0.])}
+            on_vertex, special_point = lies_on_vertex(kxy, gamma_vertex)
+            if on_vertex:
+                points = np.array([[0., 0.]])
+            elif lies_on_poly(kxy, self.symmetry_cone, closed=False):
+                try:
+                    reduced_sym = self.symmetry.reduce()
+                except ValueError:
+                    reduced_sym = self.symmetry
+                points, operators = apply_symmetry_operators(kxy,
+                                                             reduced_sym)
+            else:
+                points, operators = apply_symmetry_operators(kxy, self.symmetry)
+            for sym_row in range(points.shape[0]):
+                point = points[sym_row, :]
+                symmetry_groups[sym_row].append(point)
+                weight_groups[sym_row].append(weight)
+        for i_sym, point_list in enumerate(symmetry_groups):
+            point_array = np.vstack(point_list)
+            weight_array = np.vstack(weight_groups[i_sym])
+            #point_array = order_lexicographically(point_array)
+            kvs = self.convert_to_KVectors(point_array, 1.0, 1)
+            symmetry_groups[i_sym] = kvs
+            weight_groups[i_sym] = weight_array
+        return symmetry_groups, weight_groups
 
     def convert_to_KVectors(self, points, n, direction):
         """
@@ -245,9 +300,11 @@ class RegularSampler(Sampler):
         if grid_type == 'cartesian':
             all_points = self._sample_cartesian(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
-        if grid_type == 'circular':
+        elif grid_type == 'circular':
             all_points = self._sample_circular(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
+        else:
+            raise ValueError("unknown grid type: {}, allowed types |cartesian|circular|".format(grid_type))
         return all_points
 
     def _npoints_from_constraint(self, vector_lengths, constraint):
@@ -371,6 +428,11 @@ class RegularSampler(Sampler):
         vector_lengths = np.array([self.kspace.fermi_radius, self.kspace.fermi_radius])
         if restrict_to_sym_cone:
             opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+            wedge = Wedge((0., 0.), r=self.kspace.fermi_radius*2, theta1=0.,
+                          theta2=np.degrees(opening_angle))
+            wedge_vertices = wedge._path._vertices
+            wedge_polygon = Polygon(wedge_vertices)
+            #print("Wedge: {}".format(wedge_polygon))
         else:
             opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
@@ -401,9 +463,29 @@ class RegularSampler(Sampler):
                                                       opening_angle):
                         continue
                 rect_center = (nx-0.5)*vector1 + (ny-0.5)*vector2 + central_point
-                square = Rectangle(rect_center, vector_lengths[0], vector_lengths[1])
-                artists.append(square)
-                weighting.append(vector_lengths[0]*vector_lengths[1]/total_area)
+                square = Rectangle(rect_center, vector_lengths[0], vector_lengths[1])          
+                if restrict_to_sym_cone:
+                    #square_vertices = square._path._vertices
+                    #square_vertices = [rect_center-np.array([vector_lengths[0], 0.])*0.5]
+                    #square_vertices.append(rect_center-np.array([vector_lengths[0], 0.])*0.5)
+                    p0 = (trial_point -vector1*0.5 -vector2*0.5).tolist()
+                    p1 = (trial_point +vector1*0.5 -vector2*0.5).tolist()
+                    p2 = (trial_point +vector1*0.5 +vector2*0.5).tolist()
+                    p3 = (trial_point -vector1*0.5 +vector2*0.5).tolist()
+                    square_vertices = [p0, p1, p2, p3]
+                    square_polygon = Polygon(square_vertices)
+                    #intersect  = shapely.intersection(wedge_polygon, square_polygon)
+                    intersect = wedge_polygon.intersection(square_polygon)
+                    weight = intersect.area
+                    weighting.append(weight)
+                    #print("Trial Point: {}".format(trial_point))
+                    #print("Square Polygon: {}".format(square_polygon))
+                    #print("Intersection: {}".format(intersect))
+                    new_patch = PolygonPatch(intersect)
+                    artists.append(new_patch)
+                else:
+                    artists.append(square)                          
+                    weighting.append(vector_lengths[0]*vector_lengths[1]/total_area)
                 all_points.append(trial_point)
 
         all_point_array = np.vstack(all_points)
@@ -411,6 +493,8 @@ class RegularSampler(Sampler):
                                                        return_sort_indices=True)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
         weighting_array = np.array(weighting)
+        if restrict_to_sym_cone:
+            weighting_array /= weighting_array.sum()
         weighting_array = weighting_array[sort_indices]
         if return_artists:
             return all_kvs, weighting_array, artists
@@ -574,10 +658,15 @@ class PeriodicSampler(Sampler):
         (N,3) <np.double> np.array
             the sample points
         """
-        sampling = self.lattice.unit_cell.sample(constraint=constraint,
+        sampling, weighting = self.lattice.unit_cell.sample(constraint=constraint,
                                                  shifted=shifted,
                                                  use_symmetry=use_symmetry)
+        return self._bloch_fam_from_sample(sampling, cutoff_tol, restrict_to_sym_cone,
+                                           weighting=weighting)
 
+    def _bloch_fam_from_sample(self, sampling, cutoff_tol, restrict_to_sym_cone,
+                               weighting=None):
+        
         angle0 = 0.0
         opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
         n_sample_points = sampling.shape[0]
@@ -598,6 +687,7 @@ class PeriodicSampler(Sampler):
         vec1 = self.lattice.vectors.vec1
         vec2 = self.lattice.vectors.vec2
         counter = 0
+        use_symmetry = True
         for i_family in range(n_sample_points):
             central_point = sampling[i_family]
             bloch_family = []

@@ -226,17 +226,17 @@ class LatticeVectors():
             self.make_vectors()
 
         R = rotation2D(90)
-        a1 = self.vec1[0:2]
-        a2 = self.vec2[0:2]
+        a1 = self.vec1 #[0:2]
+        a2 = self.vec2 #[0:2]
         if np.any( a2 == float('inf')) :
-            a2_ = np.array([0.0,1.0])
+            a2_ = np.array([0.0, 1.0, 0.])
             b1 = (2*np.pi*R.dot(a2_)/ np.dot(a1,R.dot(a2_)))
             b2 = (2*np.pi*R.dot(a1)/ np.dot(a2,R.dot(a1)))
         else:
             b1 = (2*np.pi*R.dot(a2)/ np.dot(a1,R.dot(a2)))
             b2 = (2*np.pi*R.dot(a1)/ np.dot(a2,R.dot(a1)))
-        b1 = np.array([b1[0],b1[1],0.0])
-        b2 = np.array([b2[0],b2[1],0.0])
+        #b1 = np.array([b1[0],b1[1],0.0])
+        #b2 = np.array([b2[0],b2[1],0.0])
 
         b1_norm = np.linalg.norm(b1)
         b2_norm = np.linalg.norm(b2)
@@ -342,7 +342,6 @@ class Lattice():
 
     def __repr__(self):
         return f"Lattice({self.vectors}, {self.lattice_type})"
-
 
     @property
     def brillouin_zone(self):

@@ -10,7 +10,8 @@ class KVector(object):
 
     def __init__(self, wavelength,
                  n=None, theta=None, phi=None, normal=None,
-                 kx=None, ky=None, kz=None, validate=True):
+                 kx=None, ky=None, kz=None, weighting=None,
+                 validate=True):
         self.wavelength = wavelength #scalar
         self.k0 = 2*np.pi/(self.wavelength)
         self.n = n
@@ -20,6 +21,7 @@ class KVector(object):
         self.kx = kx
         self.ky = ky
         self.kz = kz
+        self.weighting = weighting
         if validate:
             combination = self.validateData()
             self.completeData(combination)
@@ -122,6 +124,7 @@ class KVectorGroupColumns(Enum):
     phi = 4
     normal = 5
     n = 6
+    weighting = 7
 
 class KVectorGroup(object):
 
@@ -132,11 +135,12 @@ class KVectorGroup(object):
 
     def __init__(self, wavelength, n_rows,
                  n=None, theta=None, phi=None, normal=None,
-                 kx=None, ky=None, kz=None, validate=True, data=None):
+                 kx=None, ky=None, kz=None, validate=True, data=None,
+                 weighting=None):
         self.wavelength = wavelength #scalar
         self.k0 = 2*np.pi/(self.wavelength)
         self.n_rows = n_rows
-        self.data_ = np.empty((n_rows,7),dtype=np.float64)
+        self.data_ = np.empty((n_rows, 8),dtype=np.float64)
         if data is None:
             self.data_.fill(float('nan'))
         else:
@@ -152,7 +156,7 @@ class KVectorGroup(object):
             self.completeData(combination)
 
     def __repr__(self):
-        return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
+        return "k:{},theta:{},phi:{},normal:{},n:{},weight:{}".format(self.k,self.theta,self.phi,self.normal,self.n,self.weighting)
 
     def validateData(self):
         validColumns = []
@@ -262,6 +266,9 @@ class KVectorGroup(object):
     def n(self):
         return self.data_[:,self.cols.n.value]
 
+    @property
+    def weighting(self):
+        return self.data_[:,self.cols.weighting.value]
 
     @property
     def normal(self):
@@ -292,6 +299,7 @@ class KVectorGroup(object):
                          kx = datarow[self.cols.kx.value],
                          ky = datarow[self.cols.ky.value],
                          kz = datarow[self.cols.kz.value],
+                         weighting = datarow[self.cols.weighting.value],
                          validate=False)
 
     def __add__(self,other):
@@ -302,10 +310,9 @@ class KVectorGroup(object):
                                  data=newData,validate=False)
 
 
-
 class BlochFamilyColumns(Enum):
-    order1 = 7
-    order2 = 8
+    order1 = 8
+    order2 = 9
 
 class BlochFamily(KVectorGroup):
 
@@ -328,7 +335,7 @@ class BlochFamily(KVectorGroup):
          #order2 = kwargs.pop("order2")
          super(BlochFamily, self).__init__(*args, **kwargs)
 
-         extended_data = np.empty((self.n_rows,9), dtype=np.float64)
+         extended_data = np.empty((self.n_rows, 10), dtype=np.float64)
          extended_data.fill(float('nan'))
          extended_data[:,:BlochFamilyColumns.order1.value] = self.data_
          self.data_ = extended_data
@@ -364,8 +371,62 @@ class BlochFamily(KVectorGroup):
         return_str =  "k:{},theta:{},phi:{},".format(self.k,self.theta,self.phi)
         return_str += "normal:{},n:{},".format(self.normal,self.n)
         return_str += "order1:{},order2:{}".format(self.order1, self.order2)
+        return_str += "weight:{},".format(self.weighting)
         return return_str
 
+class SymmetryFamily(Enum):
+    symmetry = 8
+
+class SymmetryFamily(KVectorGroup):
+    """
+    Extends KVectorGroup to include a symmetry order
+    """
+    def __init__(self, *args, symmetry=None, **kwargs):
+         """Initialize a SymmetryFamily object
+
+         For more information on arguemnts, see KVectorGroup
+
+         Parameters
+         ----------
+         symmetry: (N,)<np.int64>np.array
+            the symmetry
+         """
+         super(SymmetryFamily, self).__init__(*args, **kwargs)
+
+         extended_data = np.empty((self.n_rows, 9), dtype=np.float64)
+         extended_data.fill(float('nan'))
+         extended_data[:,:SymmetryFamilyColumns.order1.value] = self.data_
+         self.data_ = extended_data
+         if symmetry is not None:
+             self.data_[:, SymmetryFamilyColumns.symmetry.value] = symmetry
+
+    @classmethod
+    def from_kvector_group(symmetry_family, kvector_group):
+        """Return SymmetryFamily from a KVectorGroup
+
+
+        """
+        return SymmetryFamily(kvector_group.wavelength,
+                           kvector_group.n_rows,
+                           data = kvector_group.data_,
+                           validate=False)
+
+    def set_symmetry(self, symmetry):
+        self.data_[:, SymmetryFamilyColumns.symmetry.value] = symmetry
+
+    @property
+    def symmetry(self):
+        return self.data_[:, SymmetryFamilyColumns.symmetry.value]
+
+    def __repr__(self):
+        return_str =  "k:{},theta:{},phi:{},".format(self.k,self.theta,self.phi)
+        return_str += "normal:{},n:{},".format(self.normal,self.n)
+        return_str += "symmetry:{}".format(self.symmetry)
+        return_str += "weight:{},".format(self.weighting)        
+        return return_str
+
+    
+    
 
 if __name__ == '__main__':
     pass

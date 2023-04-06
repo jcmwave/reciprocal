@@ -9,7 +9,7 @@ def rotation2D(theta):
         c = 0.0
     if np.abs(s) < tol:
         s = 0.0
-    return np.array([[c,-s], [s, c]])
+    return np.array([[c,-s, 0.], [s, c, 0.], [0., 0., 1.]])
 
 
 def rotation3D(theta,axis):
@@ -39,13 +39,18 @@ def rotation3D(theta,axis):
 
 def reflection2D(axis):
     if axis == 'x':
-        return np.array([[1.0,0.0], [0.0,-1.0]])
+        return np.array([[1., 0., 0.], [0., -1., 0.], [0., 0., 1.]])
     elif axis == 'y':
-        return np.array([[-1.0,0.0], [0.0,1.0]])
+        return np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
     elif axis == 'xy':
-        return np.array([[0.0,1.0], [1.0,0.0]])
+        return np.array([[0., 1., 0.], [1., 0., 0.], [0., 0., 1.]])
     return None
 
+def translation2D(vector):
+    t = np.array([[1., 0., vector[0]],
+                  [0., 1., vector[1]],
+                  [0., 0., 1.]])
+    return t
 
 def apply_symmetry_operators(point, symmetry):
     points = []
@@ -154,9 +159,12 @@ def name_vertices(vertices, named_points):
 def lies_on_vertex(point, named_vertices, rel_tol=1e-3):
     for special_point, vertex in named_vertices.items():
         #vertex = named_vertices[i_vert][1]
-        if (np.isclose(vertex[0], point[0], rtol=rel_tol) and
-            np.isclose(vertex[1], point[1], rtol=rel_tol)):
-            return (True, special_point)
+        vertex = np.atleast_2d(vertex)
+        for row in range(vertex.shape[0]):
+            if (np.isclose(vertex[row, 0], point[0], rtol=rel_tol) and
+                np.isclose(vertex[row, 1], point[1], rtol=rel_tol)):
+                return (True, special_point)
+            
     return (False, '')
 
 def order_lexicographically(points, start=0.0, return_sort_indices=False):

@@ -472,7 +472,8 @@ class Canvas():
         """
         for key in color_mapping:
             if key in sampling:
-                plt.scatter(sampling[key][:, 0], sampling[key][:, 1],
+                points = np.atleast_2d(sampling[key])
+                plt.scatter(points[:, 0], points[:, 1],
                             c=color_mapping[key], zorder=5)
 
     def _plot_unit_cell_sampling(self, sampling, color=None, to_plot='all'):
@@ -571,7 +572,7 @@ class Canvas():
         if legend:
             plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
 
-    def plot_point_sampling(self, points, plot_n_points='all', color=None,
+    def plot_point_sampling(self, points, plot_n_points='all', color='k',
                             marker='o', label=""):
         """
         plot a point sampling
@@ -606,7 +607,7 @@ class Canvas():
             #label = " {}".format(family_number+1)
         try:
             points = points.k
-        except TypeError:
+        except AttributeError:
             pass
 
 
@@ -641,14 +642,14 @@ class Canvas():
 
         norm = mpl.colors.Normalize(vmin=np.min(weighting),
                                     vmax=np.max(weighting))
-        print(np.min(weighting), np.max(weighting))
+        #print(np.min(weighting), np.max(weighting))
         plt.sca(self.ax)
         point_colors = []
         point_colors = weighting[:plot_n_points]
 
         try:
             points = points.k
-        except TypeError:
+        except AttributeError:
             pass
 
 
@@ -656,7 +657,7 @@ class Canvas():
                     marker=marker, label=label, norm=norm)
         #if legend:
         #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
-        plt.colorbar()
+        #plt.colorbar()
         return handle
 
     def plot_interpolation(self, kpoints, values):
