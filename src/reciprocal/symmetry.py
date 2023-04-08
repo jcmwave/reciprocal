@@ -16,7 +16,7 @@ class SpecialPoint(Enum):
     C = auto() # Center of the corner like edge of an oblique Brillouin Zone
     AXIS = auto() # Lying on a Symmetry axis
     EXTERIOR = auto() # Lying on the periodic boundary
-    INTERIOR = auto() # Points with no special symmetry    
+    INTERIOR = auto() # Points with no special symmetry
 
 class PointSymmetry(Enum):
     #C_INF = auto() # Infinite discrete rotational symmetry (Gamma point only)
@@ -33,14 +33,14 @@ class PointSymmetry(Enum):
     #D3 = auto() # combination of C3 and SIGMA_H
     #D4 = auto() # combination of C4 and SIGMA_H
     #D6 = auto() # combination of C6 and SIGMA_H
-    T1 = auto() # translational symmetry for first vector direction
-    T2 = auto() # translational symmetry for second vector direction
+    T = auto() # translational symmetry
+    #T2 = auto() # twofold translational symmetry
 
 ALIASES = {'D2': [PointSymmetry.SIGMA_H, PointSymmetry.C2], # combination of C2 and SIGMA_H
            'D3': [PointSymmetry.SIGMA_H, PointSymmetry.C3], # combination of C3 and SIGMA_H
            'D4': [PointSymmetry.SIGMA_H, PointSymmetry.C4], # combination of C4 and SIGMA_H
            'D6': [PointSymmetry.SIGMA_H, PointSymmetry.C6]} # combination of C6 and SIGMA_H
-    
+
 def validate_symmetry(symmetry):
     """
     return if symmetry name belongs to set of valid names
@@ -52,7 +52,7 @@ def symmetry_from_type(symmetry):
     reflections = [PointSymmetry.SIGMA_D, PointSymmetry.SIGMA_V, PointSymmetry.SIGMA_H]
     rotations = [PointSymmetry.C1, PointSymmetry.C2, PointSymmetry.C3,
                  PointSymmetry.C4, PointSymmetry.C6]
-    translations = [PointSymmetry.T1, PointSymmetry.T2]
+    translations = [PointSymmetry.T]
     if symmetry in reflections:
         return Reflection(symmetry)
     elif symmetry in rotations:
@@ -66,7 +66,7 @@ def symmetry_from_alias(symmetry):
     reflections = [PointSymmetry.SIGMA_D, PointSymmetry.SIGMA_V, PointSymmetry.SIGMA_H]
     rotations = [PointSymmetry.C1, PointSymmetry.C2, PointSymmetry.C3,
                  PointSymmetry.C4, PointSymmetry.C6]
-    translations = [PointSymmetry.T1, PointSymmetry.T2]
+    translations = [PointSymmetry.T]
     if symmetry in reflections:
         return Reflection(symmetry)
     elif symmetry in rotations:
@@ -79,7 +79,7 @@ def symmetry_from_alias(symmetry):
 def symmetry_from_alias(string):
     stack = ALIASES[string]
     return SymmetryCombination(stack)
-    
+
 class SymmetryCombination(object):
     """
     class for applying a combination of symmetries
@@ -106,7 +106,7 @@ class SymmetryCombination(object):
     def get_n_symmetry_ops(self):
         n_ops = 1
         for symmetry in self.stack:
-            n_ops *= symmetry.get_n_symmetry_ops()            
+            n_ops *= symmetry.get_n_symmetry_ops()
         return n_ops
 
     def get_symmetry_cone_angle(self):
@@ -147,14 +147,23 @@ class SymmetryCombination(object):
                             " to symmetry combination")
 
     def compatible(self, other):
-        compatible = True
-        for sym, other_sym in zip(self.stack, other.stack):
-            print(type(sym))
-            print(sym)
-            compatible = sym.compatible(other_sym)
-            if not compatible:
-                return False
-        return True
+        if isinstance(other, SymmetryCombination):
+            compatible = True
+            for sym, other_sym in zip(self.stack, other.stack):
+                compatible = sym.compatible(other_sym)
+                if not compatible:
+                    return False
+            return True
+        elif isinstance(other, Symmetry):
+            compatible = False
+            for sym in self.stack:
+                compatible = sym.compatible(other)
+                if compatible:
+                    return True
+            return False
+        else:
+            return False
+
 
     def __sub__(self, other):
         if isinstance(other, SymmetryCombination):
@@ -172,13 +181,13 @@ class SymmetryCombination(object):
                 else:
                     new_stack.append(symmetry)
             return SymmetryCombination(new_stack)
-                
-                
+
+
         else:
             raise TypeError("subtraction valid for SymmetryCombination or Symmetry, not {}".format(type(other)))
-            
-        
-    
+
+
+
 
 
 class Symmetry(object):
@@ -191,14 +200,14 @@ class Symmetry(object):
     name: PointSymmetry
         the point symmetry of this symmetry
     """
-    #known_symmetries = {'inf', 'XY', 'C2', 'C3', 'C4', 'C6', 'D1', 'D2', 'D4', 'D6', 'T1', 'T2'}
+    #known_symmetries = {'inf', 'XY', 'C2', 'C3', 'C4', 'C6', 'D1', 'D2', 'D4', 'D6', 'T', 'T2'}
 
-    def __init__(self, symmetry):        
+    def __init__(self, symmetry):
         self.group = symmetry
 
     def __add__(self, other):
         return SymmetryCombination([self, other])
-    
+
     @classmethod
     def from_string(Symmetry, string):
         if validate_symmetry(string):
@@ -218,8 +227,8 @@ class Symmetry(object):
         return self.group.name
 
     def __repr__(self):
-        return str(self.group)    
-        
+        return str(self.group)
+
 
 class Rotation(Symmetry):
     """
@@ -228,7 +237,7 @@ class Rotation(Symmetry):
 
     def __init__(self, *args, **kwargs):
         super(Rotation, self).__init__(*args, **kwargs)
-        
+
     def get_n_rotations(self):
         """
         return number of rotations for the symmetry op
@@ -258,10 +267,10 @@ class Rotation(Symmetry):
         new_points = []
         points = np.atleast_2d(points)
         for row in range(points.shape[0]):
-            point = points[row, :]        
+            point = points[row, :]
             for op in operators:
                 new_points.append(op.dot(point))
-        new_points = np.vstack(new_points)        
+        new_points = np.vstack(new_points)
         return new_points
 
     def get_symmetry_cone_angle(self):
@@ -270,7 +279,7 @@ class Rotation(Symmetry):
     def compatible(self, other):
         if not isinstance(self, type(other)):
             return False
-        
+
         n_rot_self = self.get_n_rotations()
         n_rot_other = other.get_n_rotations()
         if n_rot_other > 0:
@@ -289,14 +298,14 @@ class Rotation(Symmetry):
         if not self.compatible(other):
             raise ValueError("cannot subtract rotations if not multiples of each other")
         n_rot_self = self.get_n_rotations()
-        n_rot_other = other.get_n_rotations()        
+        n_rot_other = other.get_n_rotations()
         n_rot_new = n_rot_self/n_rot_other
         return Rotation.from_n_rotations(n_rot_new)
 
-    
-    
 
-    
+
+
+
 class Reflection(Symmetry):
     """
     class for definining reflection symmetries
@@ -336,7 +345,7 @@ class Reflection(Symmetry):
 
     def get_symmetry_cone_angle(self):
         return 2*np.pi/self.get_n_reflections()
-    
+
     def compatible(self, other):
         if not isinstance(self, type(other)):
             return False
@@ -348,7 +357,7 @@ class Reflection(Symmetry):
         if not self.compatible(other):
             raise ValueError("cannot subtract reflections with different planes")
         n_refl_self = self.get_n_reflections()-1
-        n_refl_other = other.get_n_reflections()-1        
+        n_refl_other = other.get_n_reflections()-1
         n_refl_new = n_refl_self-n_refl_other
         if n_refl_new < 0:
             raise ValueError("number of reflections negative")
@@ -366,30 +375,38 @@ class Translation(Symmetry):
 
     def __init__(self, *args, **kwargs):
         super(Translation, self).__init__(*args, **kwargs)
-        self.vector = np.array([0., 0.])    
-        
+        self.vector1 = ([1., 0.])
+        self.vector2 = ([0., 1.])
+
     def get_n_translations(self):
         """
-        return number of translations for the symmetry op
+        return number of translations for the symmetry op inside the BZ
         """
-        translations = {PointSymmetry.T1:1,
-                       PointSymmetry.T2:1}
-        return translations[self.group] + 1
+        raise NotImplemented("n translations undefined")
+        #translations = {PointSymmetry.T:1}
+        #return translations[self.group]
 
-    def apply_symmetry_operators(self, points):
+    def apply_symmetry_operators(self, points, n=1, return_orders=False):
         operators = []
 
-        operators.append(translation2D(self.vector))
+        range1 = np.arange(-n,n+1,1)
+        range2 = np.arange(-n,n+1,1)
+
         new_points = []
         points = np.atleast_2d(points)
         for row in range(points.shape[0]):
             point = points[row, :]
             point[2] = 1.0
-            new_points.append(point)
-            for op in operators:
-                new_points.append(op.dot(point))
+            for n1 in range1:
+                for n2 in range2:
+                    op = translation2D(self.vector1*n1).dot(translation2D(self.vector2*n2))
+                    new_points.append(op.dot(point))
         new_points = np.vstack(new_points)
-        return new_points
+        if return_orders:
+            N1, N2 = np.meshgrid(range1, range2)
+            return new_points, N1.flatten(), N2.flatten()
+        else:
+            return new_points
 
     def get_symmetry_cone_angle(self):
         raise NotImplemented("symmetry cone angle undefined for translational symmetry")
@@ -397,16 +414,18 @@ class Translation(Symmetry):
     def compatible(self, other):
         if not isinstance(self, type(other)):
             return False
-        if np.isclose(np.cross(self.vector, other.vector), 0.):
+        if (np.isclose(np.cross(self.vector1, other.vector1), 0.) and
+            np.isclose(np.cross(self.vector2, other.vector2), 0.)):
             #vectors are colinear
             return True
         return False
 
     def __sub__(self, other):
+        raise NotImplemented("subtraction of translation symmetry undefined")
         if not self.compatible(other):
             raise ValueError("cannot subtract translations that are not compatible")
         n_trans_self = self.get_n_translations()-1
-        n_trans_other = other.get_n_reflections()-1       
+        n_trans_other = other.get_n_reflections()-1
         n_trans_new = n_trans_self-n_trans_other
         if n_trans_new < 0:
             raise ValueError("number of translations negative")
@@ -415,20 +434,20 @@ class Translation(Symmetry):
             t.vector = self.vector
             return t
         elif n_trans_new ==0:
-            return Rotation.from_n_rotations(1)    
+            return Rotation.from_n_rotations(1)
 
     # @classmethod
     # def from_operator_values(Symmetry, op_values):
     #     #if op_values[3] == 1 and np.any(np.array(op_values)[:3]>0):
     #     #    op_values[3] = 0
-        
+
     #     for symmetry_name in PointSymmetry:
     #         symmetry = Symmetry(symmetry_name)
-    #         refl_y = symmetry.get_n_reflections_y()            
+    #         refl_y = symmetry.get_n_reflections_y()
     #         refl_x = symmetry.get_n_reflections_x()
     #         refl_xy = symmetry.get_n_reflections_xy()
     #         rot = symmetry.get_n_rotations()
-    #         this_values = [refl_y, refl_x, refl_xy, rot]            
+    #         this_values = [refl_y, refl_x, refl_xy, rot]
     #         if np.all(this_values == op_values):
     #             return symmetry
     #     if np.sum(np.abs(np.array(op_values))) == 0:
@@ -502,11 +521,10 @@ class Translation(Symmetry):
     #         raise ValueError("subtraction of symmetries requires rotations to be a multiple of each other")
     #     n_rot_new = int(n_rot_new)
     #     ops = [n_refl_y_new, n_refl_x_new, n_refl_xy_new, n_rot_new]
-    #     #print(ops)
     #     for new_value in ops:
     #         if new_value < 0:
     #             raise ValueError("subtract leading to negative symmetry undefined")
-        
+
     #     return Symmetry.from_operator_values(ops)
 
     # def get_n_symmetry_ops(self):
@@ -526,7 +544,7 @@ class Translation(Symmetry):
     #                  PointSymmetry.D3:6,
     #                  PointSymmetry.D4:8,
     #                  PointSymmetry.D6:12,
-    #                  PointSymmetry:T1:1,
+    #                  PointSymmetry:T:1,
     #                  PointSymmetry:T2:2}
     #     return n_sym_ops[self.group]
 
@@ -547,7 +565,7 @@ class Translation(Symmetry):
     #                  PointSymmetry.D3:3,
     #                  PointSymmetry.D4:4,
     #                  PointSymmetry.D6:6,
-    #                  PointSymmetry:T1:0,
+    #                  PointSymmetry:T:0,
     #                  PointSymmetry:T2:0}
     #     return rotations[self.group]
 
@@ -563,7 +581,7 @@ class Translation(Symmetry):
     #                    PointSymmetry.C3:0,
     #                    PointSymmetry.C4:0,
     #                    PointSymmetry.C6:0,
-    #                    PointSymmetry.D1:0,                       
+    #                    PointSymmetry.D1:0,
     #                    PointSymmetry.D2:0,
     #                    PointSymmetry.D3:0,
     #                    PointSymmetry.D4:0,
@@ -582,12 +600,12 @@ class Translation(Symmetry):
     #                    PointSymmetry.C3:0,
     #                    PointSymmetry.C4:0,
     #                    PointSymmetry.C6:0,
-    #                    PointSymmetry.D1:1,                       
+    #                    PointSymmetry.D1:1,
     #                    PointSymmetry.D2:1,
     #                    PointSymmetry.D3:1,
     #                    PointSymmetry.D4:1,
     #                    PointSymmetry.D6:1,
-    #                    PointSymmetry:T1:0,
+    #                    PointSymmetry:T:0,
     #                    PointSymmetry:T2:0}
     #     return reflections[self.group]
 
@@ -603,12 +621,12 @@ class Translation(Symmetry):
     #                    PointSymmetry.C3:0,
     #                    PointSymmetry.C4:0,
     #                    PointSymmetry.C6:0,
-    #                    PointSymmetry.D1:0,                       
+    #                    PointSymmetry.D1:0,
     #                    PointSymmetry.D2:0,
     #                    PointSymmetry.D3:0,
     #                    PointSymmetry.D4:0,
     #                    PointSymmetry.D6:0,
-    #                    PointSymmetry:T1:0,
+    #                    PointSymmetry:T:0,
     #                    PointSymmetry:T2:0}
     #     return reflections[self.group]
 
@@ -624,15 +642,15 @@ class Translation(Symmetry):
     #                    PointSymmetry.C3:0,
     #                    PointSymmetry.C4:0,
     #                    PointSymmetry.C6:0,
-    #                    PointSymmetry.D1:0,                       
+    #                    PointSymmetry.D1:0,
     #                    PointSymmetry.D2:0,
     #                    PointSymmetry.D3:0,
     #                    PointSymmetry.D4:0,
     #                    PointSymmetry.D6:0,
-    #                    PointSymmetry:T1:1,
+    #                    PointSymmetry:T:1,
     #                    PointSymmetry:T2:2}
     #     return translations[self.group]
-    
+
 
     # def get_symmetry_cone_angle(self):
     #     """
@@ -644,7 +662,7 @@ class Translation(Symmetry):
     #              PointSymmetry.C3:2.*np.pi/3.0,
     #              PointSymmetry.C4:2.*np.pi/4.0,
     #              PointSymmetry.C6:2.*np.pi/6.0,
-    #              PointSymmetry.D1:2.*np.pi/2.0,                 
+    #              PointSymmetry.D1:2.*np.pi/2.0,
     #              PointSymmetry.D2:2.*np.pi/4.0,
     #              PointSymmetry.D3:2.*np.pi/6.0,
     #              PointSymmetry.D4:2.*np.pi/8.0,

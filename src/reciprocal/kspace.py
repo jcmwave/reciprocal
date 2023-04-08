@@ -12,13 +12,13 @@ from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import LinearRing, Polygon
 from descartes import PolygonPatch
 from abc import ABC
-from reciprocal.symmetry import Symmetry, SpecialPoint
+from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
 from reciprocal.utils import (apply_symmetry_operators, order_lexicographically,
                               lies_on_poly, lies_on_vertex)
 from reciprocal.kvector import KVectorGroup, BlochFamily
 import warnings
 from shapely.errors import ShapelyDeprecationWarning
-warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning) 
+warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 #from kspacesampling import KVector
 #from kspacesampling import BrillouinZone
 #from kspacesampling import Symmetry
@@ -239,6 +239,39 @@ class KSpace():
                                   "than lattice symmetry"+
                                   " {}".format(lattice_sym))
         self.periodic_sampler = PeriodicSampler(lattice, self)
+
+    def restrict_to_fermi_radius(self, points, tol=1e-3, return_indices=False):
+        lengths = np.linalg.norm(points[:,:2], axis=1)
+        keep = lengths <= self.fermi_radius*(1-tol)
+        new_points = points[keep, :]
+        if return_indices:
+            return new_points, keep
+        else:
+            return new_points
+
+    def restrict_to_sym_cone(self, points, tol=1e-3, return_indices=False):
+        #if trial_point[1]> trial_point[0]*np.tan(opening_angle)+tol:
+        #    return True
+        opening_angle = self.symmetry.get_symmetry_cone_angle()
+        angles = np.angle(points[:, 0]+1j*points[:, 1])
+        keep = np.logical_and(angles>-tol, angles<opening_angle+tol)
+        new_points = points[keep, :]
+        if return_indices:
+            return new_points, keep
+        else:
+            return new_points
+
+    def restrict_to_reflection_cone(self, points, tol=1e-6, return_indices=False):
+        #if trial_point[1]> trial_point[0]*np.tan(opening_angle)+tol:
+        #    return True
+        #opening_angle = self.symmetry.get_symmetry_cone_angle()
+        #angles = np.angle(points[:, 0]+1j*points[:, 1])
+        keep = points[:, 0] >= -tol
+        new_points = points[keep, :]
+        if return_indices:
+            return new_points, keep
+        else:
+            return new_points
 
 class Sampler(ABC):
     """ abstract base class for Sampling objects
@@ -463,7 +496,7 @@ class RegularSampler(Sampler):
                                                       opening_angle):
                         continue
                 rect_center = (nx-0.5)*vector1 + (ny-0.5)*vector2 + central_point
-                square = Rectangle(rect_center, vector_lengths[0], vector_lengths[1])          
+                square = Rectangle(rect_center, vector_lengths[0], vector_lengths[1])
                 if restrict_to_sym_cone:
                     #square_vertices = square._path._vertices
                     #square_vertices = [rect_center-np.array([vector_lengths[0], 0.])*0.5]
@@ -484,7 +517,7 @@ class RegularSampler(Sampler):
                     new_patch = PolygonPatch(intersect)
                     artists.append(new_patch)
                 else:
-                    artists.append(square)                          
+                    artists.append(square)
                     weighting.append(vector_lengths[0]*vector_lengths[1]/total_area)
                 all_points.append(trial_point)
 
@@ -665,11 +698,13 @@ class PeriodicSampler(Sampler):
                                            weighting=weighting)
 
     def _bloch_fam_from_sample(self, sampling, cutoff_tol, restrict_to_sym_cone,
-                               weighting=None):
-        
+                               weighting=None, symmetries=None):
+
         angle0 = 0.0
-        opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+        #opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
         n_sample_points = sampling.shape[0]
+        if sampling.shape[1] == 2:
+            sampling = np.hstack([sampling, np.zeros((sampling.shape[0], 1))])
         """
         longest_vector = 0.0
         for key, val in self.lattice.unit_cell.special_points.items():
@@ -677,59 +712,96 @@ class PeriodicSampler(Sampler):
                 longest_vector = np.linalg.norm(val)
         """
         n_unit_cells1 = int(np.ceil(self.kspace.fermi_radius/(0.5*self.lattice.vectors.length1)))
-        range1 = range(-n_unit_cells1, n_unit_cells1+1)
+        #range1 = range(-n_unit_cells1, n_unit_cells1+1)
         n_unit_cells2 = int(np.ceil(self.kspace.fermi_radius/(0.5*self.lattice.vectors.length2)))
-        range2 = range(-n_unit_cells2, n_unit_cells2+1)
+        n_max = np.max([n_unit_cells1, n_unit_cells2])
+        print("n_max: {}".format(n_max))
+        #range2 = range(-n_unit_cells2, n_unit_cells2+1)
         all_points = []
         bloch_families = {}
-        symmetryFamilies = {}
+        # family_syms = []
+        sym_ops = []
+        #symmetryFamilies = {}
 
-        vec1 = self.lattice.vectors.vec1
-        vec2 = self.lattice.vectors.vec2
+        trans_sym = symmetry_from_type(PointSymmetry.T)
+        trans_sym.vector1 = self.lattice.vectors.vec1
+        trans_sym.vector2 = self.lattice.vectors.vec2
         counter = 0
+        no_sym = symmetry_from_type(PointSymmetry.C1)
         use_symmetry = True
         for i_family in range(n_sample_points):
             central_point = sampling[i_family]
+
+
+
             bloch_family = []
             lattice_orders = []
-            for nx in range1:
-                for ny in range2:
-                    trial_point = nx*vec1 + ny*vec2 + central_point
+            # is_sp = False
+            # for sp_point in self.lattice.unit_cell.special_points.values():
+            #     if np.linalg.norm(central_point[:2]-sp_point[:2]) < 1e-6:
+            #             refl_rot_sym = symmetries[i_family][0]
+            #             is_sp = True
+            # if self.lattice.unit_cell.lies_on_ibz(central_point) and not is_sp:
+            #     refl_rot_sym = symmetry_from_type(PointSymmetry.SIGMA_H) + symmetry_from_type(PointSymmetry.C1)
+            # else:
+            refl_rot_sym = symmetries[i_family][0]
+            #trans_sym = symmetries[i_family][1]
+            # sym_ops = []
+            new_points, n1, n2 = trans_sym.apply_symmetry_operators(central_point, n=n_max, return_orders=True)
 
-                    length = np.linalg.norm(trial_point)
-                    if length > self.kspace.fermi_radius*(1-cutoff_tol):
-                        continue
+            dummy_, keep = self.lattice.unit_cell.crop_to_bz(new_points, return_indices=True)
+            keep = np.logical_not(keep)
+            zeroth_order = np.where(np.logical_and(n1==0, n2==0))
+            keep[zeroth_order] = True
+            new_points = new_points[keep, :]
+            n1 = n1[keep]
+            n2 = n2[keep]
 
-                    if not use_symmetry:
-                        # This takes very long
-                        if test_for_duplicates(all_points, trial_point):
-                            continue
+            new_points, keep = self.kspace.restrict_to_fermi_radius(new_points, return_indices=True)
+            n1 = n1[keep]
+            n2 = n2[keep]
 
-                    if restrict_to_sym_cone:
-                        if self.test_outside_symmetry_cone(trial_point,
-                                                          opening_angle):
-                            continue
+            #new_points, keep = self.kspace.restrict_to_reflection_cone(new_points, return_indices=True)
+            #n1 = n1[keep]
+            #n2 = n2[keep]
 
+            #inside_bz = inside_bz[keep]
+            if restrict_to_sym_cone:
+                new_points, keep = self.kspace.restrict_to_sym_cone(new_points, return_indices=True)
+                n1 = n1[keep]
+                n2 = n2[keep]
+            else:
+                pass
+                # dummy, inside_sym_cone = self.kspace.restrict_to_sym_cone(new_points, return_indices=True)
+                # is_sp = False
+                # for sp_point in self.lattice.unit_cell.special_points.values():
+                #      if np.linalg.norm(central_point[:2]-sp_point[:2]) < 1e-6:
+                #          is_sp =True
+                         #central point on exterior
 
+                #             refl_rot_sym = symmetries[i_family][0]
+                #             is_sp = True
+                #inside_bz = inside_bz[keep]
 
-
-                    all_points.append(trial_point)
-                    bloch_family.append(trial_point)
-                    lattice_orders.append([nx, ny])
-                    counter += 1
-
-            if len(bloch_family) > 0:
-                bloch_array = np.vstack(bloch_family)
-                lattice_orders = np.vstack(lattice_orders)
+            all_points.append(new_points)
+            sym_ops.append(refl_rot_sym)
+            if new_points.shape[0]> 0:
+                bloch_array = new_points
                 kv_group = self.kspace.convert_to_KVectors(bloch_array, 1., 1)
                 bloch_fam = BlochFamily.from_kvector_group(kv_group)
-                bloch_fam.set_orders(lattice_orders[:,0], lattice_orders[:,1])
+                bloch_fam.set_orders(n1, n2)
                 bloch_families[i_family] = bloch_fam
+            # for row in range(new_points.shape[0]):
+            #     if inside_bz[row]:
+            #         sym_ops.append(no_sym)
+            #     else:
+            #         sym_ops.append(refl_rot_sym)
+            # family_syms.append(sym_ops)
         all_point_array = np.vstack(all_points)
         all_point_array = order_lexicographically(all_point_array)
         all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
 
-        return bloch_families, all_kvs
+        return bloch_families, all_kvs, sym_ops
 
 
 
