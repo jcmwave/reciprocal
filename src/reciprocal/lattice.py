@@ -472,3 +472,5 @@ class Lattice():
             order_array = order_array.astype('int64')
             orders_list.append(order_array)
         return orders_list, unique_distances
+
+    #def lies_on_bz_edge(self, points):

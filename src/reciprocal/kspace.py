@@ -728,6 +728,11 @@ class PeriodicSampler(Sampler):
         trans_sym.vector2 = self.lattice.vectors.vec2
         counter = 0
         no_sym = symmetry_from_type(PointSymmetry.C1)
+        try:
+            reduced_sym = self.lattice.unit_cell.symmetry().stack[0]
+        except:
+            reduced_sym = no_sym
+        reduced_sym = self.lattice.unit_cell.symmetry()
         use_symmetry = True
         for i_family in range(n_sample_points):
             central_point = sampling[i_family]
@@ -749,13 +754,17 @@ class PeriodicSampler(Sampler):
             # sym_ops = []
             new_points, n1, n2 = trans_sym.apply_symmetry_operators(central_point, n=n_max, return_orders=True)
 
-            dummy_, keep = self.lattice.unit_cell.crop_to_bz(new_points, return_indices=True)
-            keep = np.logical_not(keep)
-            zeroth_order = np.where(np.logical_and(n1==0, n2==0))
-            keep[zeroth_order] = True
-            new_points = new_points[keep, :]
-            n1 = n1[keep]
-            n2 = n2[keep]
+            # dummy_, keep = self.lattice.unit_cell.crop_to_bz(new_points, return_indices=True)
+            # keep = np.logical_not(keep)
+            # zeroth_order = np.where(np.logical_and(n1==0, n2==0))
+            # keep[zeroth_order] = True
+            # new_points = new_points[keep, :]
+            # n1 = n1[keep]
+            # n2 = n2[keep]
+
+            #if self.lattice.unit_cell.lies_on_bz(central_point):
+            #refl_rot_sym = reduced_sym #self.lattice.unit_cell.symmetry()
+
 
             new_points, keep = self.kspace.restrict_to_fermi_radius(new_points, return_indices=True)
             n1 = n1[keep]

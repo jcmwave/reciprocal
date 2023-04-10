@@ -116,15 +116,26 @@ class SymmetryCombination(object):
                 n_ops *= symmetry.get_n_symmetry_ops()
         return 2*np.pi/n_ops
 
-    def apply_symmetry_operators(self, points):
+    def apply_symmetry_operators(self, points, values=None):
         points = np.atleast_2d(points)
-        all_points =[]
-        for i_sym, symmetry in enumerate(self.stack):
+        for i_sym, symmetry in enumerate(self.stack + [1.]):
             if i_sym == 0:
-                all_points = symmetry.apply_symmetry_operators(points)
+                outputs = symmetry.apply_symmetry_operators(points, values=values)
             else:
-                all_points = symmetry.apply_symmetry_operators(all_points)
-        return all_points
+                if isinstance(outputs, tuple):
+                    all_points = outputs[0]
+                    all_values = outputs[1]
+                else:
+                    all_points = outputs
+                    all_values = None
+                if i_sym == len(self.stack):
+                    break
+                outputs = symmetry.apply_symmetry_operators(all_points, values=all_values)
+
+        if values is not None:
+            return all_points, all_values
+        else:
+            return all_points
 
     def __str__(self):
         name = "("
@@ -258,7 +269,7 @@ class Rotation(Symmetry):
                      6:PointSymmetry.C6}
         return Rotation(rotations[n_rot])
 
-    def apply_symmetry_operators(self, points):
+    def apply_symmetry_operators(self, points, values=None):
         n_rot = self.get_n_rotations()
         operators = []
         for i in range(0, n_rot):
@@ -271,7 +282,21 @@ class Rotation(Symmetry):
             for op in operators:
                 new_points.append(op.dot(point))
         new_points = np.vstack(new_points)
-        return new_points
+        if values is not None:
+            new_values = []
+            values = np.atleast_2d(values)
+            if values.shape[1] == 1:
+                new_values = np.repeat(values, n_rot)
+                new_values = new_values.reshape( (new_values.size, 1))
+            else:
+                for row in range(values.shape[0]):
+                    value = values[row, :]
+                    for op in operators:
+                        new_values.append(op.dot(value))
+                new_values = np.vstack(new_values)
+            return new_points, new_values
+        else:
+            return new_points
 
     def get_symmetry_cone_angle(self):
         return 2*np.pi/self.get_n_rotations()
@@ -329,7 +354,7 @@ class Reflection(Symmetry):
                        PointSymmetry.SIGMA_H:1}
         return reflections[self.group] + 1
 
-    def apply_symmetry_operators(self, points):
+    def apply_symmetry_operators(self, points, values=None):
         operators = []
         operators.append(reflection2D(self.axis))
 
@@ -341,7 +366,22 @@ class Reflection(Symmetry):
             for op in operators:
                 new_points.append(op.dot(point))
         new_points = np.vstack(new_points)
-        return new_points
+        if values is not None:
+            values = np.atleast_2d(values)
+            if values.shape[1]:
+                new_values = values.repeat(2)
+                new_values = new_values.reshape((new_values.size, 1))
+            else:
+                new_values = []
+                for row in range(values.shape[0]):
+                    value = values[row, :]
+                    values.append(value)
+                    for op in operators:
+                        new_values.append(op.dot(value))
+                new_values = np.vstack(new_values)
+            return new_points, new_values
+        else:
+            return new_points
 
     def get_symmetry_cone_angle(self):
         return 2*np.pi/self.get_n_reflections()
@@ -386,7 +426,7 @@ class Translation(Symmetry):
         #translations = {PointSymmetry.T:1}
         #return translations[self.group]
 
-    def apply_symmetry_operators(self, points, n=1, return_orders=False):
+    def apply_symmetry_operators(self, points, n=1, return_orders=False, values=None):
         operators = []
 
         range1 = np.arange(-n,n+1,1)
@@ -402,11 +442,22 @@ class Translation(Symmetry):
                     op = translation2D(self.vector1*n1).dot(translation2D(self.vector2*n2))
                     new_points.append(op.dot(point))
         new_points = np.vstack(new_points)
-        if return_orders:
+        return_list = [new_points]
+        if values is not None:
+            new_values = np.repeat(values, int(new_points.size/point.size), axis=0)
+            return_list += [new_values]
+        if return_orders is True:
             N1, N2 = np.meshgrid(range1, range2)
-            return new_points, N1.flatten(), N2.flatten()
+            return_list += [N1.flatten(), N2.flatten()]
+        if len(return_list) == 1:
+            return return_list[0]
         else:
-            return new_points
+            return return_list
+        # if return_orders:
+        #     N1, N2 = np.meshgrid(range1, range2)
+        #     return new_points, N1.flatten(), N2.flatten()
+        # else:
+        #     return new_points
 
     def get_symmetry_cone_angle(self):
         raise NotImplemented("symmetry cone angle undefined for translational symmetry")

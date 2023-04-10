@@ -248,7 +248,7 @@ class UnitCell():
         #y = self.vertices[:,1]
         x = self.lattice.vectors.vec1
         y = self.lattice.vectors.vec2
-        area =  0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
+        area =  np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
         return area
 
     def make_vertices(self):
@@ -512,7 +512,7 @@ class UnitCell():
         # points = np.vstack(points)
         points = order_lexicographically(points)
         weights = self.weight_bz_sampling(points)
-        int_element = self.integration_element(constraint)/self.area()
+        int_element = self.integration_element(constraint)#/self.area()
         return points, weights, int_element
 
         #self.sampling = ipoly_samp
@@ -663,13 +663,18 @@ class UnitCell():
         max_lengths= self._max_lengths_from_constraint(constraint)
         x = self.lattice.vectors.vec1*(max_lengths[0]/self.lattice.vectors.length1)
         y = self.lattice.vectors.vec2*(max_lengths[1]/self.lattice.vectors.length2)
-        area =  0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
+        area = np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
         return area
 
     def lies_on_ibz(self, point):
         p = Point(point).buffer(1e-9)
         irreducible_bz = LinearRing(self.irreducible[:,:2])
         return p.intersects(irreducible_bz)
+
+    def lies_on_bz(self, point):
+        p = Point(point).buffer(1e-9)
+        bz = LinearRing(self.vertices[:,:2])
+        return p.intersects(bz)
 
     def sample_irreducible(self, constraint = None, shifted = False):
         """
@@ -733,15 +738,16 @@ class UnitCell():
         n = np.max(n_grid_points)
         n += int(n/2.)
 
-        int_element = self.integration_element(constraint)/self.area()
+        int_element = self.integration_element(constraint)#/self.area()
 
         if shifted:
             origin = (1./2.)*vec1 + (1./2.)*vec2
         else:
             origin = np.array([0., 0., 0.])
-
         points = trans_sym.apply_symmetry_operators(origin, n=n)
         points = self.crop_to_ibz(points)
+        if n == 1:
+            points = np.atleast_2d(points[0, :])
         for row in range(points.shape[0]):
             trial_point = points[row, :2]
             p = Point(trial_point).buffer(1e-9)
