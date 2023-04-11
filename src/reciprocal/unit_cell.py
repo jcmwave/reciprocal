@@ -361,8 +361,9 @@ class UnitCell():
         return special_points
 
     def crop_to_bz(self, points, return_indices=False):
-        vertices = np.round(self.vertices[:,:2], 9)
-        poly = Polygon(vertices).buffer(1e-9)
+        vertices = self.vertices[:,:2]
+        norm = np.amax(np.linalg.norm(vertices, axis=1))
+        poly = Polygon(vertices).buffer(norm*1e-8)
         keep = np.zeros(points.shape[0], dtype=bool)
         for row in range(points.shape[0]):
             point = points[row, :2]
@@ -376,8 +377,9 @@ class UnitCell():
             return cropped_points
 
     def crop_to_ibz(self, points):
-        vertices = np.round(self.irreducible[:,:2], 9)
-        poly = Polygon(vertices).buffer(1e-9)
+        vertices = self.irreducible[:,:2]
+        norm = np.amax(np.linalg.norm(vertices, axis=1))        
+        poly = Polygon(vertices).buffer(norm*1e-8)
         keep = np.zeros(points.shape[0], dtype=bool)
         for row in range(points.shape[0]):
             point = points[row, :2]
@@ -394,7 +396,7 @@ class UnitCell():
         extended_special_points = OrderedDict()
         for special_point, symmetry in self.special_points.items():
             #print(special_point)
-            point = np.round(self.special_points[special_point], 9)
+            point = self.special_points[special_point]
             #print(point)
             extended_points = t_sym.apply_symmetry_operators(point)
             extended_points = self.crop_to_bz(extended_points)
@@ -775,12 +777,14 @@ class UnitCell():
         all_weights = []
         refl_rot_syms = self.refl_rot_symmetries()
         ext_special_points = self.extend_special_points()
+        #print(ext_special_points)
         total_sym = self.symmetry()
         #print(trans_syms)
         #print(ipoly_samp)
         for symmetry in refl_rot_syms:
             if symmetry not in ipoly_samp:
                 continue
+            
             if symmetry in ext_special_points:
                 bloch_symmetries_in_bz = ext_special_points[symmetry].shape[0]
             elif symmetry == SpecialPoint.EXTERIOR:
