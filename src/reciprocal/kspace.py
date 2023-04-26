@@ -604,7 +604,6 @@ class PeriodicSampler(Sampler):
             woods_points = shifted_circ[ origin_distance<=r, :]
             if woods_points.shape[0] == 0:
                 continue
-            woods_points = order_lexicographically(woods_points)
             woods_kvs.append(self.kspace.convert_to_KVectors(woods_points, 1., 1.))
         return woods_kvs
 
