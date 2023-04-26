@@ -752,7 +752,7 @@ class UnitCell():
             points = np.atleast_2d(points[0, :])
         for row in range(points.shape[0]):
             trial_point = points[row, :2]
-            p = Point(trial_point).buffer(1e-9)
+            p = Point(trial_point).buffer(np.mean(max_lengths)*1e-9)
             on_vertex, special_point = lies_on_vertex(trial_point,
                                                        self.special_points)
             if on_vertex:
