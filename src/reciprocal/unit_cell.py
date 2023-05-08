@@ -94,6 +94,7 @@ def find_intersections(vertices, n_closest):
         the intersection points between the lines
     """
     closest = np.full(n_closest, np.inf)
+    length_scale = vertices[0][0]
     intersections = []
     for vertex1, vertex2 in itertools.combinations(vertices, 2):
         L1 = line(vertex1[1][0, :], vertex1[1][1, :])
@@ -101,24 +102,29 @@ def find_intersections(vertices, n_closest):
         inter = intersection(L1, L2)
         if inter is not False:
             my_intersection = np.array([inter[0], inter[1], 0.])
-            distance = np.round(np.linalg.norm(my_intersection), 9)
+            #distance = np.round(np.linalg.norm(my_intersection), 9)#
+            distance = np.linalg.norm(my_intersection)
+            #print(closest[0], distance, my_intersection)
             for ic in range(n_closest):
-                if np.isclose(distance, closest[ic], rtol=1e-6):
+                if np.isclose(distance, closest[ic], rtol=1e-6, atol=length_scale*1e-9):
                     break
-                if distance < closest[ic]:
+                if distance -closest[ic]< -1*length_scale*1e-6:
                     closest[ic] = distance
                     break
-            if np.all(distance > closest*(1.)):
+            if np.all(distance -closest > length_scale*1e-6):
                 continue
             valid = True
             for i_inter in range(len(intersections)):
-                if (np.isclose(my_intersection[0], intersections[i_inter][1][0]) and
-                    np.isclose(my_intersection[1], intersections[i_inter][1][1])):
+                if (np.isclose(my_intersection[0], intersections[i_inter][1][0],
+                               rtol=1e-6, atol=length_scale*1e-9) and
+                    np.isclose(my_intersection[1], intersections[i_inter][1][1],
+                               rtol=1e-6, atol=length_scale*1e-9)):
                         valid = False
                         break
             if not valid:
                 continue
             intersections.append([distance, my_intersection])
+
 
 
 
@@ -146,9 +152,10 @@ def split_intersections(intersections, closest):
     """
     final_intersections = []
     keep_intersections = []
+    length_scale = intersections[0][0]
     for i_inter, inter in enumerate(intersections):
         distance = inter[0]
-        if np.any(distance> closest*(1+1e-9)):
+        if np.any(distance -closest> length_scale*1e-9):
             keep_intersections.append(inter)
             continue
         final_intersections.append(inter[1])
@@ -695,7 +702,7 @@ class UnitCell():
             The symmetry regions with their associated k-space points
 
         """
-        irreducible_bz = LinearRing(self.irreducible[:,:2])
+        irreducible_bz = LinearRing(self.irreducible[:, :2])
         bz = LinearRing(self.vertices[:, :2])
         #irreducible_vertices = np.hstack([irreducible_path.vertices, np.zeros((irreducible_path.vertices.shape[0], 1))])
         n_grid_points = self._npoints_from_constraint(constraint)
