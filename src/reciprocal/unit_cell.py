@@ -5,6 +5,7 @@ from reciprocal.utils import (apply_symmetry_operators, lies_on_vertex, lies_on_
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
 from reciprocal.utils import BravaisLattice
 #import matplotlib.pyplot as plt
+from scipy.spatial.distance import cdist
 
 import shapely.geometry
 from shapely.geometry.point import Point
@@ -385,7 +386,7 @@ class UnitCell():
 
     def crop_to_ibz(self, points):
         vertices = self.irreducible[:,:2]
-        norm = np.amax(np.linalg.norm(vertices, axis=1))        
+        norm = np.amax(np.linalg.norm(vertices, axis=1))
         poly = Polygon(vertices).buffer(norm*1e-8)
         keep = np.zeros(points.shape[0], dtype=bool)
         for row in range(points.shape[0]):
@@ -702,11 +703,9 @@ class UnitCell():
             The symmetry regions with their associated k-space points
 
         """
-        irreducible_bz = LinearRing(self.irreducible[:, :2])
-        bz = LinearRing(self.vertices[:, :2])
         #irreducible_vertices = np.hstack([irreducible_path.vertices, np.zeros((irreducible_path.vertices.shape[0], 1))])
         n_grid_points = self._npoints_from_constraint(constraint)
-        max_lengths = self._max_lengths_from_constraint(constraint)
+        #max_lengths = self._max_lengths_from_constraint(constraint)
         if n_grid_points[0] == 1:
             vec1 = np.array([0.0, 0.0, 0.0])
         else:
@@ -724,23 +723,6 @@ class UnitCell():
         trans_sym.vector2 = vec2
 
 
-        special_points = list(self.special_points.keys())
-        special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
-        ipoly_samp = {}
-        for special_point in special_points:
-            ipoly_samp[special_point] = []
-
-        #range1 = np.linspace(-(n_grid_points[0]-1), n_grid_points[0]-1, n_grid_points[0]*2-1, dtype=np.int64)
-        #range2 = np.linspace(-(n_grid_points[1]-1), n_grid_points[1]-1, n_grid_points[1]*2-1, dtype=np.int64)
-
-        #range_lim1 = n_grid_points[0]
-        #range_lim2 = n_grid_points[1]
-
-        #extended_range_lim1 = range_lim1+int(n_grid_points[0]/2.0)
-        #extended_range_lim2 = range_lim2+int(n_grid_points[1]/2.0)
-
-        #range1 = np.arange(-extended_range_lim1, extended_range_lim1, 1, dtype=np.int64)
-        #range2 = np.arange(-extended_range_lim2, extended_range_lim2, 1, dtype=np.int64)
 
         range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
         range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
@@ -757,9 +739,24 @@ class UnitCell():
         points = self.crop_to_ibz(points)
         if n == 1:
             points = np.atleast_2d(points[0, :])
+        all_points, all_weights, all_sym_ops = self.weight_and_sym_sample(points)
+        return all_points, all_weights, int_element, all_sym_ops
+
+    def weight_and_sym_sample(self, points):
+        irreducible_bz = LinearRing(self.irreducible[:, :2])
+        bz = LinearRing(self.vertices[:, :2])
+
+        representative_lengths = cdist(points, points)
+        representative_length = np.amin(representative_lengths[~np.eye(representative_lengths.shape[0],dtype=bool)])
+        special_points = list(self.special_points.keys())
+        special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
+        ipoly_samp = {}
+        for special_point in special_points:
+            ipoly_samp[special_point] = []
+
         for row in range(points.shape[0]):
             trial_point = points[row, :2]
-            p = Point(trial_point).buffer(np.mean(max_lengths)*1e-9)
+            p = Point(trial_point).buffer(np.mean(representative_length)*1e-9)
             on_vertex, special_point = lies_on_vertex(trial_point,
                                                        self.special_points)
             if on_vertex:
@@ -791,7 +788,7 @@ class UnitCell():
         for symmetry in refl_rot_syms:
             if symmetry not in ipoly_samp:
                 continue
-            
+
             if symmetry in ext_special_points:
                 bloch_symmetries_in_bz = ext_special_points[symmetry].shape[0]
             elif symmetry == SpecialPoint.EXTERIOR:
@@ -815,7 +812,7 @@ class UnitCell():
                 #    all_sym_ops.append((symm, None))
         all_points = np.vstack(all_points)
         all_weights = np.array(all_weights)
-        return all_points, all_weights, int_element, all_sym_ops
+        return all_points, all_weights, all_sym_ops
         #self.sampling = ipoly_samp
 
     def weight_sym_ops(self, sym_ops):
