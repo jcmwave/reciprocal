@@ -7,6 +7,7 @@ from matplotlib.patches import Wedge, Circle, Rectangle
 #from numpy.lib.scimath import sqrt as csqrt
 import scipy.spatial
 import shapely.geometry
+import scipy.optimize
 from shapely.geometry.point import Point
 from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import LinearRing, Polygon
@@ -50,6 +51,27 @@ def get_bloch_statistics(bloch_sampling):
     info['FamilySizes'] = family_sizes
     info['Speedup'] = info['NKPoints']/info['NFamilies']
     return info
+
+def spiral_arc_length(b, phi0, phi1):
+    lower = phi0*np.sqrt(1+phi0**2) + np.arcsinh(phi0)
+    upper = phi1*np.sqrt(1+phi1**2) + np.arcsinh(phi1)
+    return b*0.5*(upper-lower)
+
+def jac_spiral_arc_length(b, phi1):
+    g = 1 + phi1**2
+    upper = g**(-0.5) + g**(0.5) + phi1**2 * g**(-0.5)
+    return b*0.5*upper
+
+def compare_arc_length(x, b, phi0, goal_length):
+    arc_length = spiral_arc_length(b, phi0, x[0])
+    #jac = jac_compare_arc_length(x, b)
+    #return_val = np.array([goal_length-arc_length, jac])
+    #print(return_val)
+    return arc_length-goal_length
+
+def jac_compare_arc_length(x, b):
+    jac_arc_length = jac_spiral_arc_length(b, x[0])
+    return jac_arc_length
 
 
 class KSpace():
@@ -336,6 +358,9 @@ class RegularSampler(Sampler):
         elif grid_type == 'circular':
             all_points = self._sample_circular(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
+        elif grid_type == 'spiral':
+            all_points = self._sample_spiral(constraint, shifted, cutoff_tol,
+                                           restrict_to_sym_cone, return_artists)
         else:
             raise ValueError("unknown grid type: {}, allowed types |cartesian|circular|".format(grid_type))
         return all_points
@@ -375,7 +400,93 @@ class RegularSampler(Sampler):
         for ii, gp in enumerate(n_grid_points):
             if gp == 0:
                 n_grid_points[ii] = 1
+
         return n_grid_points
+
+    def _sample_spiral(self, constraint, shifted, cutoff_tol,
+                          restrict_to_sym_cone, return_artists):
+        vector1 = np.array([self.kspace.fermi_radius, 0.])
+        vector_lengths = np.array([self.kspace.fermi_radius])
+        if restrict_to_sym_cone:
+            opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
+        else:
+            opening_angle = 2*np.pi
+
+        n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
+        #print("n grid points: {}".format(n_grid_points))
+        radial_range = range(0, n_grid_points[0])
+
+        #circumference = np.pi*2*self.kspace.fermi_radius
+        #n_phis = self._npoints_from_constraint([circumference], constraint)
+
+        all_points = []
+        weighting = []
+        artists = []
+        rad_spacing = vector_lengths[0]/(n_grid_points[0]-0.5)*3.
+        #print("rad spacing: {}".format(rad_spacing))
+        a = 0.
+        b = rad_spacing/(np.pi*2.0)
+        if shifted:
+            raise ValueError("shifted no supported for spiral grids")
+
+        total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
+
+
+        step = 0
+        for spiral_n in range(3):
+            if spiral_n == 0:
+                rotation = 0.
+            elif spiral_n == 1:
+                rotation = np.pi*2/3.
+            elif spiral_n == 2:
+                rotation = np.pi*2*2./3.
+            phi0 = 0.
+            current_outer_radius = 0.
+            while current_outer_radius < self.kspace.fermi_radius:
+                #for n_r in radial_range:
+                #print(step, spiral_n)
+                if step == 0:
+                    all_points.append(np.array([0., 0.]))
+                    #center_circle_area = np.pi*(rad_spacing/2.)**2*opening_angle/(2*np.pi)
+                    weighting.append(1.)
+                    artists.append(Circle((0.,0.), radius=rad_spacing/6., fill=False, edgecolor='k'))
+                    step += 1
+                    continue
+
+                opt_fun = lambda x: compare_arc_length(x, b, phi0, rad_spacing*0.333)
+                opt_jac = lambda x: jac_compare_arc_length(x, b)
+                x0 = np.array([phi0])
+                res = scipy.optimize.root_scalar(opt_fun, x0=x0, fprime=opt_jac, method='newton')
+                phi1 = res.root[0]
+                current_outer_radius = b*phi1
+
+                x = current_outer_radius*np.cos(phi1+rotation)
+                y = current_outer_radius*np.sin(phi1+rotation)
+                trial_point = np.array([x, y])
+                length = np.linalg.norm(trial_point)
+                if length > self.kspace.fermi_radius*(1-cutoff_tol):
+                    break
+
+                weighting.append(1.)
+                all_points.append(trial_point)
+                artists.append(Circle((x, y), radius=rad_spacing/6., fill=False, edgecolor='k'))
+                phi0 = phi1
+                step += 1
+
+        all_point_array = np.vstack(all_points)
+        all_point_array, sort_indices = order_lexicographically(all_point_array,
+                                                       return_sort_indices=True)
+        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+        weighting_array = np.array(weighting)
+        weighting_array /= np.sum(weighting_array)
+        #weighting_array /= total_area
+        weighting_array = weighting_array[sort_indices]
+        if return_artists:
+            artists = np.array(artists)
+            artists = artists[sort_indices]
+            return all_kvs, weighting_array, artists
+        else:
+            return all_kvs, weighting_array
 
     def _sample_circular(self, constraint, shifted, cutoff_tol,
                           restrict_to_sym_cone, return_artists):
@@ -481,7 +592,12 @@ class RegularSampler(Sampler):
         vector_lengths /= n_grid_points
 
         if shifted:
-            central_point = 0.5*(vector1 + vector2)
+            if not restrict_to_sym_cone:
+                central_point = 0.5*(vector1 + vector2)
+            else:
+                shift_length = np.mean(vector_lengths)*0.5*np.sqrt(2)
+                central_point = shift_length*np.array([np.cos(opening_angle*0.5), np.sin(opening_angle*0.5)])
+
         else:
             central_point = np.array([0., 0.])
         for nx in range1:
@@ -556,6 +672,7 @@ class PeriodicSampler(Sampler):
         self.lattice = lattice
 
     def calc_woods_anomalies(self, order, n_refinements=0,
+                             radius=None,
                              restrict_to_sym_cone=False):
         """
         return sets of samplings along Wood anomalies
@@ -572,7 +689,9 @@ class PeriodicSampler(Sampler):
         list (N,3) <np.double> np.array
             list of the wood anomalies
         """
-        r = self.kspace.fermi_radius
+        if radius is None:
+            radius = self.kspace.fermi_radius
+        #r = self.kspace.fermi_radius
         n_points = 12*(1+n_refinements)
 
         vec1 = np.tile(self.lattice.vectors.vec1, n_points).reshape(n_points,3)
@@ -584,8 +703,8 @@ class PeriodicSampler(Sampler):
         vlength = self.lattice.vectors.length1
         phis = np.linspace(0, np.pi*2., n_points+1)[:-1]
 
-        circ_x = r*np.cos(phis)
-        circ_y = r*np.sin(phis)
+        circ_x = radius*np.cos(phis)
+        circ_y = radius*np.sin(phis)
         circ_z = np.zeros(phis.shape)
         circ_points = np.vstack([circ_x, circ_y, circ_z]).T
         max_order = order**2
@@ -601,10 +720,11 @@ class PeriodicSampler(Sampler):
                 angle = np.angle(shifted_circ[:,0]+1j*shifted_circ[:,1])
                 shifted_circ = shifted_circ[np.logical_and(angle >= 0. ,angle <= opening_angle), :]
             origin_distance = np.linalg.norm(shifted_circ, axis=1)
-            woods_points = shifted_circ[ origin_distance<=r, :]
+            woods_points = shifted_circ[ origin_distance<=self.kspace.fermi_radius, :]
             if woods_points.shape[0] == 0:
                 continue
-            woods_kvs.append(self.kspace.convert_to_KVectors(woods_points, 1., 1.))
+            n = self.kspace.fermi_radius / self.kspace.k0
+            woods_kvs.append(self.kspace.convert_to_KVectors(woods_points, n, 1.))
         return woods_kvs
 
 
@@ -714,7 +834,7 @@ class PeriodicSampler(Sampler):
         #range1 = range(-n_unit_cells1, n_unit_cells1+1)
         n_unit_cells2 = int(np.ceil(self.kspace.fermi_radius/(0.5*self.lattice.vectors.length2)))
         n_max = np.max([n_unit_cells1, n_unit_cells2])
-        print("n_max: {}".format(n_max))
+        #print("n_max: {}".format(n_max))
         #range2 = range(-n_unit_cells2, n_unit_cells2+1)
         all_points = []
         bloch_families = {}
@@ -765,7 +885,8 @@ class PeriodicSampler(Sampler):
             #refl_rot_sym = reduced_sym #self.lattice.unit_cell.symmetry()
 
 
-            new_points, keep = self.kspace.restrict_to_fermi_radius(new_points, return_indices=True)
+            new_points, keep = self.kspace.restrict_to_fermi_radius(new_points, tol=cutoff_tol,
+                                                                    return_indices=True)
             n1 = n1[keep]
             n2 = n2[keep]
 
