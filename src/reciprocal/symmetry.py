@@ -284,11 +284,15 @@ class Rotation(Symmetry):
         new_points = np.vstack(new_points)
         if values is not None:
             new_values = []
-            values = np.atleast_2d(values)
+            if len(values.shape) == 1:
+                #is scalar
+                values = np.atleast_2d(values).reshape(values.size, 1)
             if values.shape[1] == 1:
+                #is scalar value
                 new_values = np.repeat(values, n_rot)
                 new_values = new_values.reshape( (new_values.size, 1))
             else:
+                #is vector value
                 for row in range(values.shape[0]):
                     value = values[row, :]
                     for op in operators:
@@ -367,15 +371,20 @@ class Reflection(Symmetry):
                 new_points.append(op.dot(point))
         new_points = np.vstack(new_points)
         if values is not None:
-            values = np.atleast_2d(values)
-            if values.shape[1]:
+            new_values = []
+            if len(values.shape) == 1:
+                #is scalar
+                values = np.atleast_2d(values).reshape(values.size, 1)
+            if values.shape[1] ==1:
+                #is scalar value
                 new_values = values.repeat(2)
                 new_values = new_values.reshape((new_values.size, 1))
             else:
+                #is vector value
                 new_values = []
-                for row in range(values.shape[0]):
-                    value = values[row, :]
-                    values.append(value)
+                for row in range(values.shape[1]):
+                    value = values[0, 1]
+                    new_values.append(value)
                     for op in operators:
                         new_values.append(op.dot(value))
                 new_values = np.vstack(new_values)
