@@ -362,7 +362,7 @@ class Canvas():
         self._plot_lattice(lattice, patch_generator, orders=orders,
                            label_orders=label_orders)
 
-    def plot_tesselation(self, lattice, orders=None, label_orders=False):
+    def plot_tesselation(self, lattice, orders=None, label_orders=False, color='k'):
         patch_generator = self._get_poly_patch
         self._plot_lattice(lattice, patch_generator, orders=orders,
                            label_orders=label_orders)
@@ -509,7 +509,7 @@ class Canvas():
                  verticalalignment='center',
                  clip_on=True)
 
-    def plot_fermi_circle(self, kspace):
+    def plot_fermi_circle(self, kspace, color='k'):
         if isinstance(kspace, KSpace):
             if kspace.fermi_radius is None:
                 raise ValueError("cannot plot fermi circle: fermi radius not set")
@@ -517,19 +517,19 @@ class Canvas():
         else:
             radius = kspace
         circle_patch = Circle((0, 0), radius=radius,
-                                  edgecolor='k', linestyle='-',
+                                  edgecolor=color, linestyle='-',
                                   linewidth=2.0, fill=False)
         self.ax.add_artist(circle_patch)
         self.update_bbox([[-radius, -radius], [radius, radius]])
 
-    def plot_symmetry_cone(self, kspace):
+    def plot_symmetry_cone(self, kspace, color='k'):
         if kspace.fermi_radius is None:
             raise ValueError("cannot plot symmetry cone: fermi radius not set")
         if kspace.symmetry is None:
             raise ValueError("cannot plot symmetry cone: symmetry not set")
         wedge_patch = Wedge((0, 0), kspace.fermi_radius,
                              0., np.degrees(kspace.symmetry.get_symmetry_cone_angle()),
-                                  edgecolor='k', linestyle='--',
+                                  edgecolor=color, linestyle='--',
                                   linewidth=2.0, fill=False)
         self.ax.add_artist(wedge_patch)
 
