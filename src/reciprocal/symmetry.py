@@ -103,6 +103,22 @@ class SymmetryCombination(object):
                                 " {} or {},  not {}".format(Symmetry, PointSymmetry, type(symmetry)))
         self.stack = stack
 
+    @classmethod
+    def from_string(symmetry_combination, input_str):
+        input_str = input_str[1:-1]
+        parts = input_str.split(",")
+        syms = []
+        for part in parts:
+            if part[0] == '(':
+                sym = SymmetryCombination.from_string(part)
+            else:
+                part.removeprefix("PointSymmetry.")
+                part = part.strip()
+                sym = Symmetry.from_string(part)
+            syms.append(sym)
+        return SymmetryCombination(syms)
+
+
     def get_n_symmetry_ops(self):
         n_ops = 1
         for symmetry in self.stack:
