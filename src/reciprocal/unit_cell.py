@@ -682,7 +682,7 @@ class UnitCell():
         return p.intersects(irreducible_bz)
 
     def lies_on_bz(self, point):
-        p = Point(point).buffer(1e-9)
+        p = Point(point).buffer(1e-8)
         bz = LinearRing(self.vertices[:,:2])
         return p.intersects(bz)
 
@@ -747,6 +747,7 @@ class UnitCell():
         bz = LinearRing(self.vertices[:, :2])
 
         representative_lengths = cdist(points, points)
+
         representative_length = np.amin(representative_lengths[~np.eye(representative_lengths.shape[0],dtype=bool)])
         special_points = list(self.special_points.keys())
         special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
