@@ -6,11 +6,11 @@ from matplotlib.patches import Wedge, Circle, Rectangle
 #from matplotlib.patches import Polygon
 #from numpy.lib.scimath import sqrt as csqrt
 import scipy.spatial
-import shapely.geometry
+#import shapely.geometry
 import scipy.optimize
-from shapely.geometry.point import Point
-from shapely.geometry.linestring import LineString
-from shapely.geometry.polygon import LinearRing, Polygon
+#from shapely.geometry.point import Point
+#from shapely.geometry.linestring import LineString
+from shapely.geometry.polygon import Polygon
 from descartes import PolygonPatch
 from abc import ABC
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
@@ -623,7 +623,6 @@ class RegularSampler(Sampler):
                     p3 = (trial_point -vector1*0.5 +vector2*0.5).tolist()
                     square_vertices = [p0, p1, p2, p3]
                     square_polygon = Polygon(square_vertices)
-                    #intersect  = shapely.intersection(wedge_polygon, square_polygon)
                     intersect = wedge_polygon.intersection(square_polygon)
                     weight = intersect.area
                     weighting.append(weight)
@@ -774,7 +773,7 @@ class PeriodicSampler(Sampler):
         dict
             the sample points sorted into bloch families
         """
-        families, all_points = self._bloch_fam_sampler(constraint, shifted,
+        families, all_points, sym_ops = self._bloch_fam_sampler(constraint, shifted,
                                                        use_symmetry, cutoff_tol,
                                                        restrict_to_sym_cone)
         return families
@@ -782,7 +781,7 @@ class PeriodicSampler(Sampler):
     def sample(self, constraint=None, shifted=False,
                               use_symmetry=True, cutoff_tol=1e-5,
                               restrict_to_sym_cone=False):
-        families, all_points = self._bloch_fam_sampler(constraint, shifted,
+        families, all_points, sym_ops = self._bloch_fam_sampler(constraint, shifted,
                                                        use_symmetry, cutoff_tol,
                                                        restrict_to_sym_cone)
         return all_points
@@ -809,15 +808,19 @@ class PeriodicSampler(Sampler):
             the sample points sorted into bloch families
         (N,3) <np.double> np.array
             the sample points
+        list
+            sym_ops
+
         """
-        sampling, weighting = self.lattice.unit_cell.sample(constraint=constraint,
+        sampling, weighting, int_element = self.lattice.unit_cell.sample(constraint=constraint,
                                                  shifted=shifted,
                                                  use_symmetry=use_symmetry)
+        sampling, weighting, symmetries = self.lattice.unit_cell.weight_and_sym_sample(sampling)
         return self._bloch_fam_from_sample(sampling, cutoff_tol, restrict_to_sym_cone,
-                                           weighting=weighting)
+                                           symmetries)
 
     def _bloch_fam_from_sample(self, sampling, cutoff_tol, restrict_to_sym_cone,
-                               weighting=None, symmetries=None):
+                               symmetries):
 
         angle0 = 0.0
         #opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
