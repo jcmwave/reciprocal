@@ -384,10 +384,10 @@ class UnitCell():
         else:
             return cropped_points
 
-    def crop_to_ibz(self, points):
+    def crop_to_ibz(self, points, return_indices=False, tol=1e-8):
         vertices = self.irreducible[:,:2]
         norm = np.amax(np.linalg.norm(vertices, axis=1))
-        poly = Polygon(vertices).buffer(norm*1e-8)
+        poly = Polygon(vertices).buffer(norm*tol)
         keep = np.zeros(points.shape[0], dtype=bool)
         for row in range(points.shape[0]):
             point = points[row, :2]
@@ -395,7 +395,10 @@ class UnitCell():
             if p.intersects(poly):
                 keep[row] = True
         cropped_points = points[keep]
-        return cropped_points
+        if return_indices:
+            return cropped_points, keep
+        else:
+            return cropped_points
 
     def extend_special_points(self):
         if self.special_points is None:
