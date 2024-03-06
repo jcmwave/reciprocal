@@ -40,6 +40,16 @@ def choose_color(item, n_items):
     color[0,:] = cmap((float(item))/NColors)
     return color
 
+def _generate_orders(order_lims):
+    first_orders = range(order_lims[0][0]-2, order_lims[0][1]+3)
+    second_orders = range(order_lims[1][0]-2, order_lims[1][1]+3)
+    order_list = []
+    for xi in first_orders:
+        for yi in second_orders:
+            order_list.append([xi, yi])
+    order_array = np.array(order_list)
+    return order_array
+
 class Canvas():
 
     def __init__(self, ax=None):
@@ -362,10 +372,10 @@ class Canvas():
         self._plot_lattice(lattice, patch_generator, orders=orders,
                            label_orders=label_orders)
 
-    def plot_tesselation(self, lattice, orders=None, label_orders=False, color='k'):
+    def plot_tesselation(self, lattice, orders=None, label_orders=False, **kwargs):
         patch_generator = self._get_poly_patch
         self._plot_lattice(lattice, patch_generator, orders=orders,
-                           label_orders=label_orders)
+                           label_orders=label_orders, **kwargs)
 
     def plot_lattice_distance_groups(self, lattice, max_order=2, label_orders=False):
         patch_generator = self._get_poly_patch
@@ -380,14 +390,10 @@ class Canvas():
 
     def _default_orders(self):
         orders = [[-2, 2], [-2, 2]]
-        first_orders = range(orders[0][0]-2, orders[0][1]+3)
-        second_orders = range(orders[1][0]-2, orders[1][1]+3)
-        order_list = []
-        for xi in first_orders:
-            for yi in second_orders:
-                order_list.append([xi, yi])
-        order_array = np.array(order_list)
-        return order_array
+        return _generate_orders(oders)
+
+
+
 
     def _plot_lattice(self, lattice, patch_generator,
                       orders=None, label_orders=False,
@@ -509,16 +515,16 @@ class Canvas():
                  verticalalignment='center',
                  clip_on=True)
 
-    def plot_fermi_circle(self, kspace, color='k'):
+    def plot_fermi_circle(self, kspace, linewidth=2.0, color='k', fill=False,
+                          **kwargs):
         if isinstance(kspace, KSpace):
             if kspace.fermi_radius is None:
                 raise ValueError("cannot plot fermi circle: fermi radius not set")
             radius = kspace.fermi_radius
         else:
             radius = kspace
-        circle_patch = Circle((0, 0), radius=radius,
-                                  edgecolor=color, linestyle='-',
-                                  linewidth=2.0, fill=False)
+        circle_patch = Circle((0, 0), radius=radius, linewidth=linewidth,
+                              color=color, fill=fill, **kwargs)
         self.ax.add_artist(circle_patch)
         self.update_bbox([[-radius, -radius], [radius, radius]])
 
