@@ -240,6 +240,7 @@ class KSpace():
         convert a (N,2) np.array of kx,ky values into a KVectorGroup object.
         """
         nRows = points.shape[0]
+        n = self.fermi_radius/self.k0
         return KVectorGroup(self.wavelength, nRows,
                             kx=points[:,0],
                             ky=points[:,1],
@@ -353,17 +354,17 @@ class RegularSampler(Sampler):
     def sample(self, grid_type='cartesian', constraint=None, shifted=False,
                cutoff_tol=1e-5, restrict_to_sym_cone=False, return_artists=False):
         if grid_type == 'cartesian':
-            all_points = self._sample_cartesian(constraint, shifted, cutoff_tol,
+            sampling_output = self._sample_cartesian(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
         elif grid_type == 'circular':
-            all_points = self._sample_circular(constraint, shifted, cutoff_tol,
+            sampling_output = self._sample_circular(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
         elif grid_type == 'spiral':
-            all_points = self._sample_spiral(constraint, shifted, cutoff_tol,
+            sampling_output = self._sample_spiral(constraint, shifted, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
         else:
-            raise ValueError("unknown grid type: {}, allowed types |cartesian|circular|".format(grid_type))
-        return all_points
+            raise ValueError("unknown grid type: {}, allowed types |cartesian|circular|spiral".format(grid_type))
+        return sampling_output
 
     def _npoints_from_constraint(self, vector_lengths, constraint):
         """
