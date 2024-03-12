@@ -390,7 +390,7 @@ class Canvas():
 
     def _default_orders(self):
         orders = [[-2, 2], [-2, 2]]
-        return _generate_orders(oders)
+        return _generate_orders(orders)
 
 
 
