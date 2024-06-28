@@ -5,6 +5,7 @@ from matplotlib.patches import Wedge, Circle, Rectangle
 #import matplotlib.pyplot as plt
 #from matplotlib.patches import Polygon
 #from numpy.lib.scimath import sqrt as csqrt
+from copy import copy
 import scipy.spatial
 #import shapely.geometry
 import scipy.optimize
@@ -788,7 +789,7 @@ class PeriodicSampler(Sampler):
         return all_points
 
     def _bloch_fam_sampler(self, constraint, shifted, use_symmetry, cutoff_tol,
-                           restrict_to_sym_cone):
+                           restrict_to_sym_cone, sample_irreducible=False):
         """
         Return a point sampling of k-space in bloch families
 
@@ -813,9 +814,13 @@ class PeriodicSampler(Sampler):
             sym_ops
 
         """
-        sampling, weighting, int_element = self.lattice.unit_cell.sample(constraint=constraint,
-                                                 shifted=shifted,
-                                                 use_symmetry=use_symmetry)
+        if sample_irreducible:
+            sampling, weighting, int_element, sym_ops = self.lattice.unit_cell.sample_irreducible(constraint=constraint,
+                                                                                                  shifted=shifted)
+        else:
+            sampling, weighting, int_element = self.lattice.unit_cell.sample(constraint=constraint,
+                                                                             shifted=shifted,
+                                                                             use_symmetry=use_symmetry)
         sampling, weighting, symmetries = self.lattice.unit_cell.weight_and_sym_sample(sampling)
         return self._bloch_fam_from_sample(sampling, cutoff_tol, restrict_to_sym_cone,
                                            symmetries)
@@ -936,7 +941,55 @@ class PeriodicSampler(Sampler):
 
         return bloch_families, all_kvs, sym_ops
 
+    def symmetrise_bloch_family(self, bloch_family:KVectorGroup,
+                                ibz_symmetry, values=None, tolerance=1e-6):
+        """
+        apply symmetry opterators to a bloch family while avoiding duplicates
+        """
 
+        difference = self.lattice.unit_cell.symmetry()-ibz_symmetry[0]
+        if values is None:
+            sym_points = difference.apply_symmetry_operators(bloch_family.k)
+        else:
+            #value = values[keep]
+            sym_points, sym_values = difference.apply_symmetry_operators(bloch_family.k,
+                                                                         values=values)
+            all_values = copy(values).tolist()
+        all_points = copy(bloch_family.k).tolist()
+        power = int(-1*np.log10(tolerance))
+        test_set = set()
+        for point in all_points:
+            str_point1 = np.format_float_scientific(point[0], power)
+            str_point2 = np.format_float_scientific(point[1], power)
+            str_point = str_point1+str_point2
+            test_set.add(hash(str_point))
+        for row in range(sym_points.shape[0]):
+            current_k = sym_points[row, :]
+            str_point1 = np.format_float_scientific(current_k[0], power)
+            str_point2 = np.format_float_scientific(current_k[1], power)
+            str_point = str_point1+str_point2
+            current_hash = hash(str_point)
+            add_point = True
+            for row2 in range(len(all_points)):
+                if current_hash in test_set:
+                    add_point = False
+                    break
+            if add_point:
+                all_points.append(current_k)
+                test_set.add(current_hash)
+
+                if values is not None:
+                    all_values.append(sym_values[row])
+        all_point_array = np.vstack(all_points)
+        all_point_array, sorting = order_lexicographically(all_point_array, return_sort_indices=True)
+        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+
+        if values is None:
+            return all_kvs
+        else:
+            all_values = np.vstack(all_values)
+            all_values = all_values[sorting]
+            return all_kvs, all_values
 
     def plotSymmetryFamilies(self,ax,n='all',color=None):
         if self.symmetry_families is None:
