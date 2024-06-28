@@ -190,3 +190,4 @@ class BravaisLattice(Enum):
     SQUARE = 1
     RECTANGLE = 2
     OBLIQUE = 3
+    RHOMBUS = 4
