@@ -431,6 +431,8 @@ class Lattice():
         elif (np.isclose(angle, 90.) or
               np.isclose(length2*np.cos(np.radians(co_angle)), length1)):
             bv_lat = BravaisLattice.RECTANGLE
+        elif np.isclose(length1, length2):
+            bv_lat = BravaisLattice.RHOMBUS
         else:
             bv_lat = BravaisLattice.OBLIQUE
         return bv_lat
