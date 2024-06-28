@@ -77,7 +77,8 @@ class KVector(object):
 
     def getKZFromKXYNNormal(self):
         return self.normal_*np.sqrt(np.clip( self.knorm**2 -self.kx**2 -self.ky**2,
-                                      a_min=(self.knorm**2)*1e-6,a_max=None))
+                                             a_min=0.,#,(self.knorm**2)*1e-12,
+                                             a_max=None))
 
     def getThetaPhiFromK(self):
         kxy = np.sqrt( self.kx**2 + self.ky**2)
@@ -211,7 +212,7 @@ class KVectorGroup(object):
         return self.normal_*np.sqrt(np.clip( np.power(self.knorm,2)
                                             -np.power(self.kx,2)
                                             -np.power(self.ky,2),
-                                            a_min=(np.power(self.knorm,2))*1e-6,
+                                             a_min=0., #(np.power(self.knorm,2))*1e-12,
                                             a_max=None))
 
     def getThetaPhiFromK(self):
