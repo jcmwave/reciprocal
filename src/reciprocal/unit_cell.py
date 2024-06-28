@@ -445,7 +445,10 @@ class UnitCell():
                 and key is SpecialPoint.GAMMA):
                 continue
             ipoly.append(val)
-        ipoly = np.vstack(ipoly)
+        if len(ipoly)>0:
+            ipoly = np.vstack(ipoly)
+        else:
+            ipoly = np.array([])
         return ipoly
 
     def sample(self, constraint=None, shifted=False, use_symmetry=True):
