@@ -18,7 +18,8 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=['numpy', 'matplotlib', 'scipy'],
+    install_requires=['numpy', 'matplotlib', 'scipy',
+                      'shapely==1.8.5.post1', 'descartes==1.1.0'],
     python_requires='>=3.6',
     include_package_data=True,
 )
