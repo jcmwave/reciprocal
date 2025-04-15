@@ -28,13 +28,13 @@ def choose_color(item, n_items):
         the rgb + alpha information
     """
     if n_items <= 10:
-        cmap = cm.get_cmap('tab10')
+        cmap = mpl.colormaps['tab10']
         NColors =10.0
     elif n_items > 10 and n_items <=20:
-        cmap = cm.get_cmap('tab20')
+        cmap = mpl.colormaps['tab20']
         NColors =20.0
     else:
-        cmap = cm.get_cmap('turbo')
+        cmap = mpl.colormaps['turbo']
         NColors = float(n_items)
     color = np.zeros((1,4))
     color[0,:] = cmap((float(item))/NColors)
@@ -487,16 +487,16 @@ class Canvas():
         n_points = sampling.shape[0]
         if color is None:
             if n_points <= 10:
-                cmap = cm.get_cmap('tab10')
+                cmap = mpl.colormaps['tab10']
                 n_colors = 10.0
             elif  10 < n_points <= 20:
-                cmap = cm.get_cmap('tab20')
+                cmap = mpl.colormaps['tab20']
                 n_colors = 20.0
             elif 20 < n_points <= 40:
-                cmap = cm.get_cmap('tab20c')
+                cmap = mpl.colormaps['tab20c']
                 n_colors = 40.0
             else:
-                cmap = cm.get_cmap('jet')
+                cmap = mpl.colormaps['turbo']
                 n_colors = float(n_points)
             colors = cmap((np.arange(n_points)/n_colors))
         else:
@@ -528,13 +528,13 @@ class Canvas():
         self.ax.add_artist(circle_patch)
         self.update_bbox([[-radius, -radius], [radius, radius]])
 
-    def plot_symmetry_cone(self, kspace, color='k'):
+    def plot_symmetry_cone(self, kspace, color='k', start_angle=0.):
         if kspace.fermi_radius is None:
             raise ValueError("cannot plot symmetry cone: fermi radius not set")
         if kspace.symmetry is None:
             raise ValueError("cannot plot symmetry cone: symmetry not set")
         wedge_patch = Wedge((0, 0), kspace.fermi_radius,
-                             0., np.degrees(kspace.symmetry.get_symmetry_cone_angle()),
+                             start_angle, start_angle+np.degrees(kspace.symmetry.get_symmetry_cone_angle()),
                                   edgecolor=color, linestyle='--',
                                   linewidth=2.0, fill=False)
         self.ax.add_artist(wedge_patch)
