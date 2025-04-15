@@ -52,57 +52,6 @@ def translation2D(vector):
                   [0., 0., 1.]])
     return t
 
-def apply_symmetry_operators(point, symmetry):
-    points = []
-    refXOperators = []
-    refYOperators = []
-    refXYOperators = []
-    rotOperators = []
-
-    s = symmetry
-    nRot = s.get_n_rotations()
-    nRefX = s.get_n_reflections_x()
-    nRefY = s.get_n_reflections_y()
-    nRefXY = s.get_n_reflections_xy()
-
-    for i in range(1,nRot):
-        rotOperators.append(rotation2D(i*360.0/nRot))
-
-    for i in range(nRefX):
-        refXOperators.append(reflection2D('x'))
-
-    for i in range(nRefY):
-        refYOperators.append(reflection2D('y'))
-
-    for i in range(nRefXY):
-        refXYOperators.append(reflection2D('xy'))
-
-    operatorStack = [np.eye(2)]
-
-    for i in range(len(rotOperators)):
-        operatorStack.append( rotOperators[i])
-    nOps = len(operatorStack)
-
-    for iOp in range(nOps):
-        for iRefX in range(nRefX):
-            operatorStack.append( refXOperators[iRefX].dot(operatorStack[iOp]))
-    nOps = len(operatorStack)
-
-    for iOp in range(nOps):
-        for iRefY in range(nRefY):
-            operatorStack.append( refYOperators[iRefY].dot(operatorStack[iOp]))
-    nOps = len(operatorStack)
-
-    for iOp in range(nOps):
-        for iRefXY in range(nRefXY):
-            operatorStack.append( refXYOperators[iRefXY].dot(operatorStack[iOp]))
-    points = []
-    for op in operatorStack:
-        points.append( op.dot(point))
-
-    points = np.vstack(points)
-
-    return points,operatorStack
 
 def is_between(a, c, b, rel_tol=1e-3):
     return np.isclose(np.linalg.norm(a-c) + np.linalg.norm(c-b),
