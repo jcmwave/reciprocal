@@ -1,5 +1,5 @@
 import numpy as np
-from reciprocal.utils import (apply_symmetry_operators, lies_on_vertex, lies_on_poly,
+from reciprocal.utils import (lies_on_vertex, lies_on_poly,
                               name_vertices, lies_on_sym_line, rotation2D, rotation3D,
                               order_lexicographically)
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
@@ -362,6 +362,8 @@ class UnitCell():
                 special_points[SpecialPoint.Y1] = 0.5*vec2
                 special_points[SpecialPoint.Y2] = -0.5*vec2
                 special_points[SpecialPoint.H2] = 0.5*(vec1-vec2)
+        elif self.lattice.bravais is BravaisLattice.RHOMBUS:
+            pass
         else:
             raise ValueError("bravais lattice {}".format(self.lattice.bravais)+
                              " invalid")
