@@ -12,11 +12,11 @@ import scipy.optimize
 #from shapely.geometry.point import Point
 #from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
-from descartes import PolygonPatch
+#from descartes import PolygonPatch
 from abc import ABC
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
-from reciprocal.utils import (apply_symmetry_operators, order_lexicographically,
-                              lies_on_poly, lies_on_vertex)
+from reciprocal.utils import (order_lexicographically,
+                              lies_on_poly, lies_on_vertex) #apply_symmetry_operators,
 from reciprocal.kvector import KVectorGroup, BlochFamily
 import warnings
 from shapely.errors import ShapelyDeprecationWarning
@@ -167,24 +167,24 @@ class KSpace():
         for row in range(n_points):
             k = kv_group.k[row,:]
             kxy = np.array(k[:2])
+            kxyz = np.array(k[:])
             gamma_vertex = {SpecialPoint.GAMMA:np.array([0., 0., 0.])}
             on_vertex, special_point = lies_on_vertex(kxy, gamma_vertex)
             if on_vertex:
-                points = np.array([[0., 0.]])
+                points = np.array([[0., 0., 0.]])
             elif lies_on_poly(kxy, self.symmetry_cone, closed=False):
-                try:
-                    reduced_sym = self.symmetry.reduce()
-                except ValueError:
-                    reduced_sym = self.symmetry
-                points, operators = apply_symmetry_operators(kxy,
-                                                             reduced_sym)
+                # try:
+                #     reduced_sym = self.symmetry.reduce()
+                # except ValueError:
+                reduced_sym = self.symmetry
+                points = reduced_sym.apply_symmetry_operators(kxyz)
             else:
-                points, operators = apply_symmetry_operators(kxy, self.symmetry)
+                points = self.symmetry.apply_symmetry_operators(kxyz)
             for sym_row in range(points.shape[0]):
                 point = points[sym_row, :]
                 symmetry_groups[sym_row].append(point)
         for i_sym, point_list in enumerate(symmetry_groups):
-            point_array = np.vstack(point_list)
+            point_array = np.vstack(point_list)[:, :2]
             #point_array = order_lexicographically(point_array)
             kvs = self.convert_to_KVectors(point_array, 1.0, 1)
             symmetry_groups[i_sym] = kvs
@@ -210,19 +210,19 @@ class KSpace():
             k = kv_group.k[row,:]
             weight = weighting[row]
             kxy = np.array(k[:2])
+            kxyz = np.array(k[:])
             gamma_vertex = {SpecialPoint.GAMMA:np.array([0., 0., 0.])}
             on_vertex, special_point = lies_on_vertex(kxy, gamma_vertex)
             if on_vertex:
-                points = np.array([[0., 0.]])
+                points = np.array([[0., 0., 0.]])
             elif lies_on_poly(kxy, self.symmetry_cone, closed=False):
-                try:
-                    reduced_sym = self.symmetry.reduce()
-                except ValueError:
-                    reduced_sym = self.symmetry
-                points, operators = apply_symmetry_operators(kxy,
-                                                             reduced_sym)
+                # try:
+                #     reduced_sym = self.symmetry.reduce()
+                # except ValueError:
+                reduced_sym = self.symmetry
+                points, operators = reduced_sym.apply_symmetry_operators(kxy)
             else:
-                points, operators = apply_symmetry_operators(kxy, self.symmetry)
+                points, operators = self.smmetry.apply_symmetry_operators(kxy)
             for sym_row in range(points.shape[0]):
                 point = points[sym_row, :]
                 symmetry_groups[sym_row].append(point)
@@ -405,6 +405,43 @@ class RegularSampler(Sampler):
 
         return n_grid_points
 
+    def _max_lengths_from_constraint(self, vector_lengths, constraint):
+        """
+        Return number of k space sampling points based on constraint
+
+        Parameters
+        ----------
+        constraint: dict
+            constraints for number of points
+
+        Returns
+        -------
+        int
+            number of grid points
+        """
+        if constraint is None:
+            constraint = {'type':'n_points', 'value':5}
+        if constraint['type'] == "density":
+            density = constraint['value']
+            max_length = 1/(np.sqrt(density)*2)
+            max_lengths = [max_length, max_length]
+        elif constraint['type'] == 'max_length':
+            max_length = constraint['value']
+            try:
+                max_lengths = [constraint['value'][0], constraint['value'][1]]
+            except:
+                max_lengths = [constraint['value'], constraint['value']]
+        elif constraint['type'] == "n_points":
+            max_lengths = []
+            for il, length in enumerate(vector_lengths):
+                try:
+                    n_points = constraint['value'][il]
+                except:
+                    n_points = constraint['value']
+                max_lengths.append(length/n_points)
+
+        return max_lengths
+
     def _sample_spiral(self, constraint, shifted, cutoff_tol,
                           restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
@@ -499,6 +536,8 @@ class RegularSampler(Sampler):
         else:
             opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
+        max_lengths = self._max_lengths_from_constraint(vector_lengths, constraint)
+        azimuthal_constraint = {'type':'max_length', 'value':np.min(max_lengths)}
         radial_range = range(0, n_grid_points[0])
 
         all_points = []
@@ -507,7 +546,7 @@ class RegularSampler(Sampler):
         rad_spacing = vector_lengths[0]/(n_grid_points[0]-0.5)
 
         if shifted:
-            raise ValueError("shifted no supported for circular grids")
+            raise ValueError("shifted not supported for circular grids")
 
         total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
 
@@ -527,7 +566,7 @@ class RegularSampler(Sampler):
             upper_radius = rad_spacing*(n_r+0.5)
             lower_radius = rad_spacing*(n_r-0.5)
             circumference = opening_angle*radius
-            n_phis = self._npoints_from_constraint([circumference], constraint)
+            n_phis = self._npoints_from_constraint([circumference], azimuthal_constraint)
             phis = np.linspace(0, np.degrees(opening_angle), n_phis[0])
             if phis.size > 1:
                 phis = phis[:-1]
