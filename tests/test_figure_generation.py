@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib import gridspec
 from matplotlib.patches import Circle
+from matplotlib.collections import PatchCollection
 import matplotlib.cm as cm
 from scipy.interpolate import CloughTocher2DInterpolator, LinearNDInterpolator
 plt.rcParams['axes.labelsize'] = 20
@@ -29,7 +30,7 @@ def get_lattice_vectors(shape):
         return LatticeVectors.from_lengths_angle(period, period, 60.)
     elif shape == 'oblique':
         return LatticeVectors.from_lengths_angle(period, period, 75.)
-    
+
 def get_symmetry(shape):
     if shape == 'square':
         return 'D4'
@@ -45,7 +46,7 @@ def figures_dir():
     figures_dir = os.path.abspath("figures")
     if not os.path.isdir(figures_dir):
         os.makedirs(figures_dir)
-    
+
     yield figures_dir
     shutil.rmtree(figures_dir, ignore_errors=True)
 
@@ -55,7 +56,7 @@ def test_real_space_lattice_only(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
@@ -67,7 +68,7 @@ def test_real_space_lattice_only(figures_dir):
         plt.ylim([-2, 2])
         plt.title(lat_shape, fontsize=20)
     fig_path = os.path.join(figures_dir, "01_test_real_space_lattice_only.png")
-    plt.savefig(fig_path)                             
+    plt.savefig(fig_path)
 
 def test_real_space_lattice_sampled(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -75,12 +76,12 @@ def test_real_space_lattice_sampled(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         canvas.plot_tesselation(lat)
-        #canvas.plot_lattice(lat)    
+        #canvas.plot_lattice(lat)
         sampling, weighting, int_element = lat.unit_cell.sample(use_symmetry=False)
         canvas.plot_point_sampling(sampling)
         print(np.unique(weighting))
@@ -99,13 +100,13 @@ def test_reciprocal_lattice_only(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
-        canvas.plot_tesselation(rlat)    
-        canvas.plot_vectors(rlat)    
+        canvas.plot_tesselation(rlat)
+        canvas.plot_vectors(rlat)
         canvas.plot_irreducible_uc(rlat.unit_cell)
         canvas.plot_special_points(rlat.unit_cell)
 
@@ -125,13 +126,13 @@ def test_weighted_sampling_of_ibz_no_symmetry(figures_dir):
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         #print(lat_shape)
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         #print("lattice lengths: [{} {}]".format(rlat.vectors.length1, rlat.vectors.length2))
-        canvas.plot_tesselation(rlat)    
+        canvas.plot_tesselation(rlat)
         constraint = {'type':'n_points', 'value':5}
         sampling, weighting, int_element = rlat.unit_cell.sample(use_symmetry=False,
                                                                 constraint=constraint)
@@ -161,12 +162,12 @@ def test_weighted_sampling_of_ibz_with_symmetry(figures_dir):
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         print(lat_shape)
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
-        canvas.plot_tesselation(rlat)    
+        canvas.plot_tesselation(rlat)
         sampling, weighting, int_element, sym_ops = rlat.unit_cell.sample_irreducible()
 
         print("integration element: {:.6f}".format(int_element))
@@ -191,14 +192,14 @@ def test_bz_smapling_with_symmetry(figures_dir):
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         print(lat_shape)
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         #print("lattice lengths: [{} {}]".format(rlat.vectors.length1, rlat.vectors.length2))
-        canvas.plot_tesselation(rlat)    
-        canvas.plot_vectors(rlat)  
+        canvas.plot_tesselation(rlat)
+        canvas.plot_vectors(rlat)
         constraint = {'type':'n_points', 'value':4}
         sampling, weighting, int_element = rlat.unit_cell.sample(use_symmetry=True,
                                                                 constraint=constraint)
@@ -231,7 +232,7 @@ def int_lorentz_radial(gamma, x0, x):
 def cusp_function(rho, width, pos):
     L = lorentz(width, pos, rho)
     return L
-    
+
 def int_cusp_function(rho):
     L_int = int_lorentz(0.05, 0.5, rho)
     return L_int + (10./4.)*rho**4 + 10*rho
@@ -241,7 +242,7 @@ def int_cusp_function_radial(rho):
     return L_int_radial + (10./5.)*rho**5 + (10/2.)*rho**2
 
 def radial_cusp_function(kx, ky, kmax):
-    kr = np.sqrt( kx**2 + ky**2)/kmax    
+    kr = np.sqrt( kx**2 + ky**2)/kmax
     pos = kmax*0.4
     width = kmax/20
     return cusp_function(kr, width, pos)
@@ -252,7 +253,7 @@ def test_rlattice_in_kspace(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
@@ -273,7 +274,7 @@ def test_bloch_families_in_kspace(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         wvl = 0.5
         k0 = 2*np.pi/wvl
@@ -282,7 +283,7 @@ def test_bloch_families_in_kspace(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)            
+        canvas.plot_tesselation(rlat)
         canvas.plot_fermi_circle(kspace)
         families = kspace.periodic_sampler.sample_bloch_families()
         canvas.plot_bloch_families(families)
@@ -304,7 +305,7 @@ def test_bloch_families_in_sym_cone(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         wvl = 0.5
         k0 = 2*np.pi/wvl
@@ -313,7 +314,7 @@ def test_bloch_families_in_sym_cone(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)            
+        canvas.plot_tesselation(rlat)
         canvas.plot_fermi_circle(kspace)
         families = kspace.periodic_sampler.sample_bloch_families(restrict_to_sym_cone=True)
         canvas.plot_bloch_families(families)
@@ -336,7 +337,7 @@ def test_symmetrised_bloch_families_in_kspace(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         wvl = 0.5
         k0 = 2*np.pi/wvl
@@ -350,7 +351,7 @@ def test_symmetrised_bloch_families_in_kspace(figures_dir):
         sampling = kspace.periodic_sampler.sample(restrict_to_sym_cone=True, constraint={'type':'n_points', 'value':4})
         #canvas.plot_sampling(sampling.k,  color='k')
         groups = kspace.symmetrise_sample(sampling)
-        canvas.plot_symmetry_cone(kspace)    
+        canvas.plot_symmetry_cone(kspace)
 
         cmap = mpl.colormaps['tab20']
         NColors = 20
@@ -374,7 +375,7 @@ def test_woods_anomalies_no_symmetry(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         wvl = 2.0
         k0 = 2*np.pi*wvl
@@ -383,14 +384,14 @@ def test_woods_anomalies_no_symmetry(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)            
+        canvas.plot_tesselation(rlat)
         canvas.plot_fermi_circle(kspace)
         woods1 = kspace.periodic_sampler.calc_woods_anomalies(1, n_refinements = 4, restrict_to_sym_cone=True)
         cmap = mpl.colormaps['tab20']
         NColors = 20
         for i in range(len(woods1)):
             color = np.zeros((1,4))
-            color[0,:] = cmap((float(i))/NColors)    
+            color[0,:] = cmap((float(i))/NColors)
             canvas.plot_point_sampling(woods1[i], plot_n_points='all', color =color)
         canvas.plot_symmetry_cone(kspace)
 
@@ -408,7 +409,7 @@ def test_woods_anomalies_with_symmetry(figures_dir):
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
         index =  np.unravel_index(ilat, (2,2))
-        ax = fig.add_subplot(gs[index])    
+        ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         wvl = 2.0
         k0 = 2*np.pi*wvl
@@ -417,14 +418,14 @@ def test_woods_anomalies_with_symmetry(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)            
+        canvas.plot_tesselation(rlat)
         canvas.plot_fermi_circle(kspace)
         woods1 = kspace.periodic_sampler.calc_woods_anomalies(1, n_refinements = 4, restrict_to_sym_cone=True)
         cmap = mpl.colormaps['tab20']
         NColors = 20
         for i in range(len(woods1)):
             color = np.zeros((1,4))
-            color[0,:] = cmap((float(i))/NColors)    
+            color[0,:] = cmap((float(i))/NColors)
             #canvas.plot_point_sampling(woods1[i], plot_n_points='all', color =color)
             sym_woods = kspace.symmetrise_sample(woods1[i])
             for i_wood in range(len(sym_woods)):
@@ -440,14 +441,14 @@ def test_woods_anomalies_with_symmetry(figures_dir):
     fig_path = os.path.join(figures_dir, "12_woods_anomalies_with_symmetry.png")
     plt.savefig(fig_path)
 
-       
+
 def test_regular_circular_sampling_of_kspace(figures_dir):
     fig = plt.figure(figsize=(12,12))
     gs = gridspec.GridSpec(1, 1, fig, wspace=0.4, hspace=0.4)
 
 
-    ax = fig.add_subplot(gs[0])    
-    canvas = Canvas(ax=ax)    
+    ax = fig.add_subplot(gs[0])
+    canvas = Canvas(ax=ax)
     wvl = 2.0
     k0 = 2*np.pi*wvl
     kspace = KSpace(wvl, fermi_radius=k0)
@@ -459,7 +460,7 @@ def test_regular_circular_sampling_of_kspace(figures_dir):
     max_length = k0/3.
     #constraint={'type':'max_length', 'value':max_length}
     constraint={'type':'n_points', 'value':5}
-    
+
     sampling, weighting = kspace.regular_sampler.sample(
         grid_type="circular",
         constraint=constraint
@@ -475,8 +476,8 @@ def test_regular_cartesian_sampling_of_kspace(figures_dir):
     gs = gridspec.GridSpec(1, 1, fig, wspace=0.4, hspace=0.4)
 
 
-    ax = fig.add_subplot(gs[0])    
-    canvas = Canvas(ax=ax)    
+    ax = fig.add_subplot(gs[0])
+    canvas = Canvas(ax=ax)
     wvl = 2.0
     k0 = 2*np.pi*wvl
     kspace = KSpace(wvl, fermi_radius=k0)
@@ -488,7 +489,7 @@ def test_regular_cartesian_sampling_of_kspace(figures_dir):
     max_length = k0/3.
     #constraint={'type':'max_length', 'value':max_length}
     constraint={'type':'n_points', 'value':5}
-    
+
     sampling, weighting = kspace.regular_sampler.sample(
         grid_type="cartesian",
         constraint=constraint
@@ -497,4 +498,39 @@ def test_regular_cartesian_sampling_of_kspace(figures_dir):
     canvas.plot_point_sampling_weighted(sampling, weighting)
 
     fig_path = os.path.join(figures_dir, "14_test_regular_cartesian_sampling_of_kspace.png")
-    plt.savefig(fig_path)    
+    plt.savefig(fig_path)
+
+def test_regular_cartesian_sampling_with_artists_of_kspace(figures_dir):
+    fig = plt.figure(figsize=(12,12))
+    gs = gridspec.GridSpec(1, 1, fig, wspace=0.4, hspace=0.4)
+
+
+    ax = fig.add_subplot(gs[0])
+    canvas = Canvas(ax=ax)
+    wvl = 2.0
+    k0 = 2*np.pi*wvl
+    kspace = KSpace(wvl, symmetry="D4", fermi_radius=k0)
+
+    canvas.plot_fermi_circle(kspace)
+    plt.xlabel('k$_x$')
+    plt.ylabel('k$_y$')
+    plt.xlim([-15, 15])
+    plt.ylim([-15, 15])
+    max_length = k0/3.
+    #constraint={'type':'max_length', 'value':max_length}
+    constraint={'type':'n_points', 'value':8}
+
+    sampling, weighting, artists = kspace.regular_sampler.sample(
+        grid_type="cartesian",
+        constraint=constraint,
+        restrict_to_sym_cone=True,
+        return_artists=True,
+
+    )
+    #print(sampling)
+    canvas.plot_point_sampling_weighted(sampling, weighting)
+    artists = PatchCollection(artists, facecolor='none', lw=0.1)
+    ax.add_collection(artists)
+
+    fig_path = os.path.join(figures_dir, "15_test_regular_cartesian_sampling_of_kspace_with_artists.png")
+    plt.savefig(fig_path)

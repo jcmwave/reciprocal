@@ -667,10 +667,14 @@ class RegularSampler(Sampler):
                     intersect = wedge_polygon.intersection(square_polygon)
                     weight = intersect.area
                     weighting.append(weight)
+                    #print(type(intersect))
+                    xy = np.array(intersect.boundary.xy)
+                    #new_patch = Polygon(xy.T)
+                    new_patch = square
                     #print("Trial Point: {}".format(trial_point))
                     #print("Square Polygon: {}".format(square_polygon))
                     #print("Intersection: {}".format(intersect))
-                    new_patch = PolygonPatch(intersect)
+                    #new_patch = PolygonPatch(intersect)
                     artists.append(new_patch)
                 else:
                     artists.append(square)
