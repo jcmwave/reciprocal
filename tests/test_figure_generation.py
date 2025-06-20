@@ -47,7 +47,7 @@ def figures_dir():
         os.makedirs(figures_dir)
     
     yield figures_dir
-    #shutil.rmtree(figures_dir, ignore_errors=True)
+    shutil.rmtree(figures_dir, ignore_errors=True)
 
 def test_real_space_lattice_only(figures_dir):
     fig = plt.figure(figsize=(12,12))
