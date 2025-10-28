@@ -352,16 +352,16 @@ class RegularSampler(Sampler):
         """
         super().__init__(kspace)
 
-    def sample(self, grid_type='cartesian', constraint=None, shifted=False,
+    def sample(self, grid_type='cartesian', constraint=None, center=False,
                cutoff_tol=1e-5, restrict_to_sym_cone=False, return_artists=False):
         if grid_type == 'cartesian':
-            sampling_output = self._sample_cartesian(constraint, shifted, cutoff_tol,
+            sampling_output = self._sample_cartesian(constraint, center, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
         elif grid_type == 'circular':
-            sampling_output = self._sample_circular(constraint, shifted, cutoff_tol,
+            sampling_output = self._sample_circular(constraint, center, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
         elif grid_type == 'spiral':
-            sampling_output = self._sample_spiral(constraint, shifted, cutoff_tol,
+            sampling_output = self._sample_spiral(constraint, center, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
         else:
             raise ValueError("unknown grid type: {}, allowed types |cartesian|circular|spiral".format(grid_type))
@@ -442,7 +442,7 @@ class RegularSampler(Sampler):
 
         return max_lengths
 
-    def _sample_spiral(self, constraint, shifted, cutoff_tol,
+    def _sample_spiral(self, constraint, center, cutoff_tol,
                           restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector_lengths = np.array([self.kspace.fermi_radius])
@@ -465,8 +465,8 @@ class RegularSampler(Sampler):
         #print("rad spacing: {}".format(rad_spacing))
         a = 0.
         b = rad_spacing/(np.pi*2.0)
-        if shifted:
-            raise ValueError("shifted no supported for spiral grids")
+        if center:
+            raise ValueError("center no supported for spiral grids")
 
         total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
 
@@ -527,7 +527,7 @@ class RegularSampler(Sampler):
         else:
             return all_kvs, weighting_array
 
-    def _sample_circular(self, constraint, shifted, cutoff_tol,
+    def _sample_circular(self, constraint, center, cutoff_tol,
                           restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector_lengths = np.array([self.kspace.fermi_radius])
@@ -545,8 +545,8 @@ class RegularSampler(Sampler):
         artists = []
         rad_spacing = vector_lengths[0]/(n_grid_points[0]-0.5)
 
-        if shifted:
-            raise ValueError("shifted not supported for circular grids")
+        if center:
+            raise ValueError("center not supported for circular grids")
 
         total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
 
@@ -606,7 +606,7 @@ class RegularSampler(Sampler):
         else:
             return all_kvs, weighting_array
 
-    def _sample_cartesian(self, constraint, shifted, cutoff_tol,
+    def _sample_cartesian(self, constraint, center, cutoff_tol,
                          restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
         vector2 = np.array([0., self.kspace.fermi_radius])
@@ -632,7 +632,7 @@ class RegularSampler(Sampler):
         vector2 /= n_grid_points[1]
         vector_lengths /= n_grid_points
 
-        if shifted:
+        if center:
             if not restrict_to_sym_cone:
                 central_point = 0.5*(vector1 + vector2)
             else:
@@ -794,7 +794,7 @@ class PeriodicSampler(Sampler):
                 woods_points.append(kxy)
     """
 
-    def sample_bloch_families(self, constraint=None, shifted=False,
+    def sample_bloch_families(self, constraint=None, center=np.array([0., 0.]),
                               use_symmetry=True, cutoff_tol=1e-5,
                               restrict_to_sym_cone=False):
         """
@@ -804,8 +804,8 @@ class PeriodicSampler(Sampler):
         ----------
         constraint: dict
             constraints for determining the number of points in the sampling
-        shifted: bool
-            Shift the grid so the Gamma point is excluded from sampling
+        center: np.array
+            center of sampling
         use_symmetry: bool
             make sample based on symmetry of unit cell
         cutoff_tol: float
@@ -818,20 +818,20 @@ class PeriodicSampler(Sampler):
         dict
             the sample points sorted into bloch families
         """
-        families, all_points, sym_ops = self._bloch_fam_sampler(constraint, shifted,
+        families, all_points, sym_ops = self._bloch_fam_sampler(constraint, center,
                                                        use_symmetry, cutoff_tol,
                                                        restrict_to_sym_cone)
         return families
 
-    def sample(self, constraint=None, shifted=False,
+    def sample(self, constraint=None, center=np.array([0., 0.]),
                               use_symmetry=True, cutoff_tol=1e-5,
                               restrict_to_sym_cone=False):
-        families, all_points, sym_ops = self._bloch_fam_sampler(constraint, shifted,
+        families, all_points, sym_ops = self._bloch_fam_sampler(constraint, center,
                                                        use_symmetry, cutoff_tol,
                                                        restrict_to_sym_cone)
         return all_points
 
-    def _bloch_fam_sampler(self, constraint, shifted, use_symmetry, cutoff_tol,
+    def _bloch_fam_sampler(self, constraint, center, use_symmetry, cutoff_tol,
                            restrict_to_sym_cone, sample_irreducible=False):
         """
         Return a point sampling of k-space in bloch families
@@ -840,8 +840,8 @@ class PeriodicSampler(Sampler):
         ----------
         constraint: dict
             constraints for determining the number of points in the sampling
-        shifted: bool
-            Shift the grid so the Gamma point is excluded from sampling
+        center: np.array
+            center of the sampling
         use_symmetry: bool
             make sample based on symmetry of unit cell
         cutoff_tol: float
@@ -859,10 +859,10 @@ class PeriodicSampler(Sampler):
         """
         if sample_irreducible:
             sampling, weighting, int_element, sym_ops = self.lattice.unit_cell.sample_irreducible(constraint=constraint,
-                                                                                                  shifted=shifted)
+                                                                                                  center=center)
         else:
             sampling, weighting, int_element = self.lattice.unit_cell.sample(constraint=constraint,
-                                                                             shifted=shifted,
+                                                                             center=center,
                                                                              use_symmetry=use_symmetry)
         sampling, weighting, symmetries = self.lattice.unit_cell.weight_and_sym_sample(sampling)
         return self._bloch_fam_from_sample(sampling, cutoff_tol, restrict_to_sym_cone,

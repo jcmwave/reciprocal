@@ -453,7 +453,7 @@ class UnitCell():
             ipoly = np.array([])
         return ipoly
 
-    def sample(self, constraint=None, shifted=False, use_symmetry=True):
+    def sample(self, constraint=None, center=np.array([0., 0.]), use_symmetry=True):
         """
         Return a point sampling of the unit cell
 
@@ -461,8 +461,8 @@ class UnitCell():
         ----------
         constraint: dict
             constraints for determining the number of points in the sampling
-        shifted: bool
-            Shift the grid so the Gamma point is excluded from sampling
+        center: np.array
+            x y position of center of sampling, default is the origin
         use_symmetry: bool
             make sample based on symmetry of unit cell
 
@@ -471,48 +471,55 @@ class UnitCell():
         (N,3) <np.double> np.array
         """
         if use_symmetry:
-            return self._sample_using_symmetry(constraint, shifted)
+            return self._sample_using_symmetry(constraint, center)
         else:
-            return self._sample_no_symmetry(constraint, shifted)
+            return self._sample_no_symmetry(constraint, center)
 
-    def _sample_no_symmetry(self, constraint, shifted):
+    def _sample_no_symmetry(self, constraint, center):
         #unit_cell_path = Polygon(self.vertices[:,:2],
         #                           closed=True).get_path()
         unit_cell_exterior = LinearRing(self.vertices[:, :2])
         n_grid_points = self._npoints_from_constraint(constraint)
 
-
         if n_grid_points[0] == 1:
             vec1 = np.array([0.0, 0.0, 0.0])
-            vec2 = np.array([0.0, 0.0, 0.0])
         else:
             vec1 = np.array(self.vectors.vec1)
-            vec2 = np.array(self.vectors.vec2)
             vec1 = (0.5/(n_grid_points[0]-1))*(vec1)
+
+        if n_grid_points[1] == 1:
+            vec2 = np.array([0.0, 0.0, 0.0])
+        else:
+            vec2 = np.array(self.vectors.vec2)
             vec2 = (0.5/(n_grid_points[1]-1))*(vec2)
 
-        trans_sym = symmetry_from_type(PointSymmetry.T)
-        trans_sym.vector1 = vec1
-        trans_sym.vector2 = vec2
+        origin = np.concatenate([center, np.array([1.])])
+        if not np.all(np.array(n_grid_points)==1):
+            trans_sym = symmetry_from_type(PointSymmetry.T)
+            trans_sym.vector1 = vec1
+            trans_sym.vector2 = vec2
 
 
-        #range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
-        #range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
-        #range1 = np.linspace(-(n_grid_points[0]-1), n_grid_points[0]-1, n_grid_points[0]*2-1, dtype=np.int64)
-        #range2 = np.linspace(-(n_grid_points[1]-1), n_grid_points[1]-1, n_grid_points[1]*2-1, dtype=np.int64)
-        range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
-        range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
-        n = np.max(n_grid_points)
-        n += int(n/2.)
-        #print(n)
-        # if n_grid_points[0] == 1:
-        #     range1 = np.arange(0, range_lim1, 1, dtype=np.int64)
-        #     range2 = np.arange(0, range_lim2, 1, dtype=np.int64)
-        # else:
-        #     range1 = np.arange(-range_lim1, range_lim1, 1, dtype=np.int64)
-        #     range2 = np.arange(-range_lim2, range_lim2, 1, dtype=np.int64)
-        origin = np.array([0., 0., 1.])
-        points = trans_sym.apply_symmetry_operators(origin, n=n)
+            #range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
+            #range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
+            #range1 = np.linspace(-(n_grid_points[0]-1), n_grid_points[0]-1, n_grid_points[0]*2-1, dtype=np.int64)
+            #range2 = np.linspace(-(n_grid_points[1]-1), n_grid_points[1]-1, n_grid_points[1]*2-1, dtype=np.int64)
+            # range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
+            # range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
+            n = np.max(n_grid_points)
+            n += int(n/2.)
+            #print(n)
+            # if n_grid_points[0] == 1:
+            #     range1 = np.arange(0, range_lim1, 1, dtype=np.int64)
+            #     range2 = np.arange(0, range_lim2, 1, dtype=np.int64)
+            # else:
+            #     range1 = np.arange(-range_lim1, range_lim1, 1, dtype=np.int64)
+            #     range2 = np.arange(-range_lim2, range_lim2, 1, dtype=np.int64)
+
+
+            points = trans_sym.apply_symmetry_operators(origin, n=n)
+        else:
+            points = np.atleast_2d(origin)
         points = self.crop_to_bz(points)
 
         # points = []
@@ -535,7 +542,7 @@ class UnitCell():
 
         #self.sampling = ipoly_samp
 
-    def _sample_using_symmetry(self, constraint, shifted):
+    def _sample_using_symmetry(self, constraint, center):
         """
         Return a sampling of the unit cell while exploiting symmetry
 
@@ -543,8 +550,8 @@ class UnitCell():
         ----------
         constraint: dict
             constraints for determining the number of points in the sampling
-        shifted: bool
-            Shift the grid so the Gamma point is excluded from sampling
+        center: np.array
+            center of the sampling
 
         Returns
         -------
@@ -552,7 +559,7 @@ class UnitCell():
         """
         all_points = []
         sample = self.sample_irreducible(constraint=constraint,
-                                         shifted=shifted)
+                                         center=center)
         irreducible_sampling = sample[0]
         weighting = sample[1]
         int_element = sample[2]
@@ -694,7 +701,7 @@ class UnitCell():
         bz = LinearRing(self.vertices[:,:2])
         return p.intersects(bz)
 
-    def sample_irreducible(self, constraint = None, shifted = False):
+    def sample_irreducible(self, constraint = None, center = np.array([0., 0.])):
         """
         Return point sampling of the irreducible unit cell
 
@@ -702,8 +709,8 @@ class UnitCell():
         ----------
         constraint: dict
             constraints for determining the number of points in the sampling
-        shifted: bool
-            Shift the grid so the Gamma point is excluded from sampling
+        center: bool
+            center of the sampling
 
         Returns
         -------
@@ -739,10 +746,11 @@ class UnitCell():
 
         int_element = self.integration_element(constraint)#/self.area()
 
-        if shifted:
-            origin = (1./2.)*vec1 + (1./2.)*vec2
-        else:
-            origin = np.array([0., 0., 0.])
+        # if shifted:
+        #     origin = (1./2.)*vec1 + (1./2.)*vec2
+        # else:
+        #     origin = np.array([0., 0., 0.])
+        origin = np.concatenate([center, np.array([0.])])
         points = trans_sym.apply_symmetry_operators(origin, n=n)
         points = self.crop_to_ibz(points)
         if n == 1:
@@ -754,9 +762,12 @@ class UnitCell():
         irreducible_bz = LinearRing(self.irreducible[:, :2])
         bz = LinearRing(self.vertices[:, :2])
 
-        representative_lengths = cdist(points, points)
+        bbox = bz.bounds
 
-        representative_length = np.amin(representative_lengths[~np.eye(representative_lengths.shape[0],dtype=bool)])
+        #representative_lengths = cdist(points, points)
+        representative_lengths = np.array([bbox[2]-bbox[0], bbox[3]-bbox[1]])
+        #print(representative_lengths)
+        representative_length = np.min(representative_lengths) ##np.amin(representative_lengths[~np.eye(representative_lengths.shape[0],dtype=bool)])
         special_points = list(self.special_points.keys())
         special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
         ipoly_samp = {}
