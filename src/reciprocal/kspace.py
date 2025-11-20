@@ -399,6 +399,9 @@ class RegularSampler(Sampler):
                 n_grid_points = [constraint['value'][0], constraint['value'][1]]
             except:
                 n_grid_points = [constraint['value'], constraint['value']]
+        else:
+            raise ValueError(f"constraint type {constraint['type']} invalid, valid choices are: density|max_length|n_points")
+
         for ii, gp in enumerate(n_grid_points):
             if gp == 0:
                 n_grid_points[ii] = 1
@@ -621,6 +624,8 @@ class RegularSampler(Sampler):
         else:
             opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
+        max_lengths = self._max_lengths_from_constraint(vector_lengths, constraint)
+
         range1 = range(-n_grid_points[0], n_grid_points[0]+1)
         range2 = range(-n_grid_points[1], n_grid_points[1]+1)
 
@@ -628,9 +633,13 @@ class RegularSampler(Sampler):
         weighting = []
         artists = []
         total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
-        vector1 /= n_grid_points[0]
-        vector2 /= n_grid_points[1]
-        vector_lengths /= n_grid_points
+        #print(max_lengths)
+        vector1 = np.array([max_lengths[0], 0.])
+        vector2 = np.array([0., max_lengths[0]])
+        vector_lengths = max_lengths
+        #vector1 /= n_grid_points[0]
+        #vector2 /= n_grid_points[1]
+        #vector_lengths /= n_grid_points
 
         if center:
             if not restrict_to_sym_cone:
