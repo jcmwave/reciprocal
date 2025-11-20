@@ -82,7 +82,7 @@ class KVector(object):
 
     def getThetaPhiFromK(self):
         kxy = np.sqrt( self.kx**2 + self.ky**2)
-        theta = np.arctan2(kxy,np.abs(self.kz))
+        theta = np.arctan2(kxy, self.kz)
         theta = np.degrees(theta)
         phi = np.degrees(np.arctan2(self.ky,self.kx))
         return [theta,phi]
@@ -217,7 +217,7 @@ class KVectorGroup(object):
 
     def getThetaPhiFromK(self):
         kxy = np.sqrt( np.power(self.kx,2) + np.power(self.ky,2))
-        theta = np.arctan2(kxy,np.abs(self.kz))
+        theta = np.arctan2(kxy, self.kz)
         theta = np.degrees(theta)
         phi = np.degrees(np.arctan2(self.ky,self.kx))
         return [theta,phi]
