@@ -392,8 +392,12 @@ class RegularSampler(Sampler):
         elif constraint['type'] == 'max_length':
             max_length = constraint['value']
             n_grid_points = []
-            for length in vector_lengths:
-                n_grid_points.append(int(length/max_length))
+            try:
+                for length in vector_lengths:
+                    n_grid_points.append(int(length/max_length))
+            except:
+                for ii, length in enumerate(vector_lengths):
+                    n_grid_points.append(int(length/max_length[ii]))
         elif constraint['type'] == "n_points":
             try:
                 n_grid_points = [constraint['value'][0], constraint['value'][1]]
@@ -635,7 +639,7 @@ class RegularSampler(Sampler):
         total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
         #print(max_lengths)
         vector1 = np.array([max_lengths[0], 0.])
-        vector2 = np.array([0., max_lengths[0]])
+        vector2 = np.array([0., max_lengths[1]])
         vector_lengths = max_lengths
         #vector1 /= n_grid_points[0]
         #vector2 /= n_grid_points[1]
@@ -873,7 +877,9 @@ class PeriodicSampler(Sampler):
             sampling, weighting, int_element = self.lattice.unit_cell.sample(constraint=constraint,
                                                                              center=center,
                                                                              use_symmetry=use_symmetry)
+
         sampling, weighting, symmetries = self.lattice.unit_cell.weight_and_sym_sample(sampling)
+
         return self._bloch_fam_from_sample(sampling, cutoff_tol, restrict_to_sym_cone,
                                            symmetries)
 
@@ -894,7 +900,7 @@ class PeriodicSampler(Sampler):
         n_unit_cells1 = int(np.ceil(self.kspace.fermi_radius/(0.5*self.lattice.vectors.length1)))
         #range1 = range(-n_unit_cells1, n_unit_cells1+1)
         n_unit_cells2 = int(np.ceil(self.kspace.fermi_radius/(0.5*self.lattice.vectors.length2)))
-        n_max = np.max([n_unit_cells1, n_unit_cells2])
+        n_max = int(np.max([n_unit_cells1, n_unit_cells2]))
         #print("n_max: {}".format(n_max))
         #range2 = range(-n_unit_cells2, n_unit_cells2+1)
         all_points = []

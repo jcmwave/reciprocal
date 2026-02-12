@@ -451,12 +451,22 @@ class Translation(Symmetry):
         #translations = {PointSymmetry.T:1}
         #return translations[self.group]
 
-    def apply_symmetry_operators(self, points, n=1, return_orders=False, values=None):
+    def apply_symmetry_operators(self, points, n:int|tuple=2, return_orders=False, values=None):
         operators = []
-
-        range1 = np.arange(-n,n+1,1)
-        range2 = np.arange(-n,n+1,1)
-
+        if isinstance(n, int):
+            range1 = np.arange(-n+1,n,1)
+            range2 = np.arange(-n+1,n,1)
+        elif isinstance(n, tuple):
+            element1 = n[0]
+            if isinstance(element1, int):
+                range1 = np.arange(-n[0]+1,n[0],1)
+                range2 = np.arange(-n[1]+1,n[1],1)
+            else:
+                range1 = np.arange(-n[0][0]+1,n[0][1],1)
+                range2 = np.arange(-n[1][0]+1,n[1][1],1)
+        else:
+            raise AttributeError(f"wrong type for input n: {type(n)}")
+        #print(range1, range2)
         new_points = []
         points = np.atleast_2d(points)
         for row in range(points.shape[0]):

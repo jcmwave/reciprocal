@@ -480,7 +480,6 @@ class UnitCell():
         #                           closed=True).get_path()
         unit_cell_exterior = LinearRing(self.vertices[:, :2])
         n_grid_points = self._npoints_from_constraint(constraint)
-
         if n_grid_points[0] == 1:
             vec1 = np.array([0.0, 0.0, 0.0])
         else:
@@ -579,6 +578,7 @@ class UnitCell():
                     if to_keep[row2] is False:
                         continue
                     point2 = refl_rot_points[row2, :]
+
                     translated = translation_symmetry.apply_symmetry_operators(point2)
                     translated = self.crop_to_bz(translated)[::-1, :]
                     for row3 in range(1, translated.shape[0]):
@@ -593,6 +593,7 @@ class UnitCell():
                                 #print(row2, row3, row4)
                                 #print(translated)
                                 to_keep[row4] =False
+
             all_points.append(refl_rot_points[to_keep, :])
         n_points = 0
         for i, *_ in enumerate(all_points):
@@ -739,10 +740,15 @@ class UnitCell():
 
 
 
-        range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
-        range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
-        n = np.max(n_grid_points)
-        n += int(n/2.)
+        #range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
+        #range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
+        n1 = n_grid_points[0]
+        # n1 += int(n1/2.)
+
+        n2 = n_grid_points[1]
+        #n2 = 0
+        # n2 += int(n2/2.)
+
 
         int_element = self.integration_element(constraint)#/self.area()
 
@@ -751,10 +757,11 @@ class UnitCell():
         # else:
         #     origin = np.array([0., 0., 0.])
         origin = np.concatenate([center, np.array([0.])])
-        points = trans_sym.apply_symmetry_operators(origin, n=n)
+        points = trans_sym.apply_symmetry_operators(origin, n=((n1, n1), (n2, n2)))
         points = self.crop_to_ibz(points)
-        if n == 1:
+        if n1 == 1 and n2 == 1:
             points = np.atleast_2d(points[0, :])
+
         all_points, all_weights, all_sym_ops = self.weight_and_sym_sample(points)
         return all_points, all_weights, int_element, all_sym_ops
 
