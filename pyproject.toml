@@ -22,6 +22,9 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 
+[project.urls]
+Repository = "https://github.com/jcmwave/reciprocal"
+
 [project.optional-dependencies]
 plot = ["matplotlib>=3.7,<4"]
 test = [
@@ -32,6 +35,7 @@ dev = [
     "build>=1.2,<2",
     "flake8>=7,<8",
     "matplotlib>=3.7,<4",
+    "mypy>=1.11,<2",
     "pytest>=7.4,<9",
 ]
 
@@ -42,6 +46,14 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["reciprocal*"]
 
+[tool.setuptools.package-data]
+reciprocal = ["py.typed", "*.pyi"]
+
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["examples/typecheck_client.py"]

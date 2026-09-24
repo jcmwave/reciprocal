@@ -15,10 +15,11 @@ def test_symmetry_alias_factory_is_defined_once():
     assert len(definitions) == 1
 
 
-def test_experimental_stack_uses_real_value_error():
-    source = (ROOT / "src/kspace_sample/StackSystem.py").read_text()
-    assert "ValueEror" not in source
-    assert 'raise ValueError("cannot search for value 1")' in source
+def test_experimental_package_tree_is_not_distributed():
+    """The unsupported historical package was deliberately retired in P1."""
+    assert not (ROOT / "src/kspace_sample").exists()
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    assert 'include = ["reciprocal*"]' in pyproject
 
 
 def test_supported_package_has_no_assert_based_input_validation():

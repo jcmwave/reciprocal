@@ -1095,7 +1095,6 @@ class PeriodicSampler(Sampler):
 
     def plotSymmetryFamilies(self,ax,n='all',color=None):
         try:
-            import matplotlib.pyplot as plt
             from matplotlib import cm
         except ImportError as exc:
             raise ImportError(
@@ -1104,8 +1103,6 @@ class PeriodicSampler(Sampler):
             ) from exc
         if self.symmetry_families is None:
             self.calcKSampling()
-
-        plt.sca(ax)
 
         if n=='all':
             nPoints = self.sampling.shape[0]
@@ -1131,7 +1128,7 @@ class PeriodicSampler(Sampler):
             for i in range(nPoints):
                 family = self.symmetry_families[i][0]
                 color = colors[i].reshape(1,4)
-                plt.scatter(family[:,0],family[:,1],c=color)
+                ax.scatter(family[:,0],family[:,1],c=color)
         if color == "Frombloch_families":
             #nBFs = np.amax(np.array(list(self.bloch_families.keys())))
             #nBFs = len(self.bloch_families.keys())
@@ -1145,11 +1142,11 @@ class PeriodicSampler(Sampler):
                     yCheck = np.isclose( eldest[1],bf[:,1],rtol=1e-6)
                     if np.any(xCheck*yCheck):
                         color = self.chooseColor(key,nBFs)
-                plt.scatter(family[:,0],family[:,1],c=color)
+                ax.scatter(family[:,0],family[:,1],c=color)
         else:
             for i in range(nPoints):
                 family = self.symmetry_families[i][0]
-                plt.scatter(family[:,0],family[:,1],c=color)
+                ax.scatter(family[:,0],family[:,1],c=color)
 
 
 def sum_triangles(xy, z, triangles):

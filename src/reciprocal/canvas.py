@@ -56,6 +56,8 @@ class Canvas():
         if ax is None:
             fig, ax = plt.subplots(1,1)
             self.fig = fig
+        else:
+            self.fig = ax.figure
         self.ax = ax
         #self.fig
         self.bbox = [[-0., -0.], [0., 0.]]
@@ -116,18 +118,16 @@ class Canvas():
 
         if vectors.vec1 is None and vectors.vec2 is None:
             vectors.make_vectors()
-        plt.sca(self.ax)
-
         maxl = np.max([vectors.length1, vectors.length2])
         hw = 0.1*maxl
         width = 0.01*maxl
-        plt.arrow(0.0, 0.0, vectors.vec1[0], vectors.vec1[1],
+        self.ax.arrow(0.0, 0.0, vectors.vec1[0], vectors.vec1[1],
                   head_width=hw,
                   width=width,
                   color=self.colors['vector'],
                   ec=self.colors['vector'],
                   length_includes_head=True)
-        plt.arrow(0.0, 0.0, vectors.vec2[0], vectors.vec2[1],
+        self.ax.arrow(0.0, 0.0, vectors.vec2[0], vectors.vec2[1],
                   head_width=hw,
                   width=width,
                   color=self.colors['vector'],
@@ -205,7 +205,6 @@ class Canvas():
             bzone = plot_obj.bzone
         else:
             bzone = plot_obj
-        plt.sca(self.ax)
         maxl = bzone.max_extent
         artist = self._get_poly_patch(bzone.vertices,
                                       facecolor=[1.0, 0.0, 0.0, 0.5],
@@ -231,14 +230,13 @@ class Canvas():
                              ", required types:"+
                              "{}, ".format(Lattice)+
                              "{}".format(UnitCell))
-        plt.sca(self.ax)
         #maxl = bzone.max_extent
         for name, pos in sym_points.items():
             artist = Circle(xy=pos[:2],
                             radius=maxl,
                             facecolor=[1.0, 0.0, 0.0, 0.5],
                             edgecolor=[1.0, 0.0, 0.0, 0.8])
-            plt.text(pos[0], pos[1], name.name,
+            self.ax.text(pos[0], pos[1], name.name,
                      horizontalalignment='left')
 
             self.ax.add_artist(artist)
@@ -250,7 +248,6 @@ class Canvas():
         else:
             ibz = plot_obj
         maxl = ibz.max_extent
-        plt.sca(self.ax)
         artist = self._get_poly_patch(ibz.vertices,
                                       facecolor=[0.0, 1.0, 0.0, 0.5],
                                       edgecolor=[0.0, 1.0, 0.0, 0.8],)
@@ -289,7 +286,6 @@ class Canvas():
                              "{}".format(UnitCell))
 
         maxl = unit_cell.max_extent
-        plt.sca(self.ax)
         artist = self._get_poly_patch(unit_cell.irreducible,
                                       facecolor=[0.0, 0.0, 1.0, 0.5],
                                       edgecolor=[0.0, 0.0, 1.0, 0.8],)
@@ -327,7 +323,6 @@ class Canvas():
                              "{}".format(UnitCell))
 
         maxl = unit_cell.max_extent
-        plt.sca(self.ax)
         artist = self._get_poly_patch(unit_cell.vertices,
                                       facecolor=[0.0, 0.0, 1.0, 0.5],
                                       edgecolor=[0.0, 0.0, 1.0, 0.8],)
@@ -437,7 +432,7 @@ class Canvas():
                                     edgecolor=ec)
             patches.append(patch)
             if label_orders:
-                Canvas.plot_order(pos, xi, yi)
+                self.plot_order(pos, xi, yi)
             pN += 1
 
         pc = PatchCollection(patches, match_original=True)
@@ -452,7 +447,6 @@ class Canvas():
             self._plot_unit_cell_sampling(sampling, color=color)
 
     def _plot_irreducible_sampling(self, sampling, color=None):
-        plt.sca(self.ax)
         if color is None:
             color_set = ['g', 'r', 'b', 'k']
         else:
@@ -479,11 +473,10 @@ class Canvas():
         for key in color_mapping:
             if key in sampling:
                 points = np.atleast_2d(sampling[key])
-                plt.scatter(points[:, 0], points[:, 1],
-                            c=color_mapping[key], zorder=5)
+                self.ax.scatter(points[:, 0], points[:, 1],
+                                c=color_mapping[key], zorder=5)
 
     def _plot_unit_cell_sampling(self, sampling, color=None, to_plot='all'):
-        plt.sca(self.ax)
         n_points = sampling.shape[0]
         if color is None:
             if n_points <= 10:
@@ -502,18 +495,17 @@ class Canvas():
         else:
             colors = color
         if to_plot == 'all':
-            plt.scatter(sampling[:, 0], sampling[:, 1], c=colors, zorder=5)
+            self.ax.scatter(sampling[:, 0], sampling[:, 1], c=colors, zorder=5)
         else:
-            plt.scatter(sampling[0:to_plot, 0],
-                        sampling[0:to_plot, 1],
-                        c=colors)
+            self.ax.scatter(sampling[0:to_plot, 0],
+                            sampling[0:to_plot, 1],
+                            c=colors)
 
-    @staticmethod
-    def plot_order(pos, order1, order2):
-        plt.text(pos[0], pos[1], '({},{})'.format(order1, order2),
-                 horizontalalignment='center',
-                 verticalalignment='center',
-                 clip_on=True)
+    def plot_order(self, pos, order1, order2):
+        return self.ax.text(pos[0], pos[1], '({},{})'.format(order1, order2),
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            clip_on=True)
 
     def plot_fermi_circle(self, kspace, linewidth=2.0, color='k', fill=False,
                           **kwargs):
@@ -560,7 +552,6 @@ class Canvas():
             plot_n_families = len(bloch_families)
 
         norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
-        plt.sca(self.ax)
         n_families = 0
         for family_number, family in sorted(bloch_families.items()):
             #print(family_number)
@@ -571,12 +562,12 @@ class Canvas():
             color = choose_color(family_number, plot_n_families)
             label = "Bloch Family {}".format(family_number+1)
             try:
-                plt.scatter(family[:,0], family[:,1], color=color, label=label)
+                self.ax.scatter(family[:,0], family[:,1], color=color, label=label)
             except TypeError:
-                plt.scatter(family.kx, family.ky, color=color, label=label)
+                self.ax.scatter(family.kx, family.ky, color=color, label=label)
             n_families += 1
         if legend:
-            plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
+            self.ax.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
 
     def plot_point_sampling(self, points, plot_n_points='all', color='k',
                             marker='o', label=""):
@@ -602,7 +593,6 @@ class Canvas():
                 plot_n_points = points.n_rows
 
         norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
-        plt.sca(self.ax)
         point_colors = []
         for point_number in range(plot_n_points):
             if color is None:
@@ -617,8 +607,8 @@ class Canvas():
             pass
 
 
-        handle = plt.scatter(points[:, 0], points[:, 1], color=point_colors,
-                    marker=marker, label=label)
+        handle = self.ax.scatter(points[:, 0], points[:, 1], color=point_colors,
+                                 marker=marker, label=label)
         #if legend:
         #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
         return handle
@@ -649,7 +639,6 @@ class Canvas():
         norm = mpl.colors.Normalize(vmin=np.min(weighting),
                                     vmax=np.max(weighting))
         #print(np.min(weighting), np.max(weighting))
-        plt.sca(self.ax)
         point_colors = []
         point_colors = weighting[:plot_n_points]
 
@@ -659,17 +648,17 @@ class Canvas():
             pass
 
 
-        handle = plt.scatter(points[:plot_n_points, 0], points[:plot_n_points, 1], c=point_colors,
-                    marker=marker, label=label, norm=norm)
+        handle = self.ax.scatter(points[:plot_n_points, 0],
+                                 points[:plot_n_points, 1], c=point_colors,
+                                 marker=marker, label=label, norm=norm)
         #if legend:
         #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
         #plt.colorbar()
         return handle
 
     def plot_interpolation(self, kpoints, values):
-        plt.sca(self.ax)
         xi = kpoints.k[:,[0,1]]
         tessellation = scipy.spatial.Delaunay(xi)
         triangles = tessellation.vertices
-        plt.tripcolor(xi[:,0],xi[:,1],triangles,values,shading='flat',
-                      cmap='magma',edgecolors='g')
+        return self.ax.tripcolor(xi[:,0],xi[:,1],triangles,values,
+                                 shading='flat', cmap='magma', edgecolors='g')
