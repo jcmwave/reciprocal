@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 import os
+import shutil
 import reciprocal
 from reciprocal.kspace import KSpace
 from reciprocal.canvas import Canvas, choose_color
@@ -42,13 +43,13 @@ def get_symmetry(shape):
         return 'C2'
 
 @pytest.fixture(autouse=True, scope="session")
-def figures_dir():
-    figures_dir = os.path.abspath("figures")
-    if not os.path.isdir(figures_dir):
-        os.makedirs(figures_dir)
-
-    yield figures_dir
-    shutil.rmtree(figures_dir, ignore_errors=True)
+def figures_dir(tmp_path_factory):
+    figures_dir = tmp_path_factory.mktemp("figures")
+    yield str(figures_dir)
+    generated = list(figures_dir.glob("*.png"))
+    assert generated, "figure tests did not generate any images"
+    assert all(path.stat().st_size > 0 for path in generated)
+    plt.close("all")
 
 def test_real_space_lattice_only(figures_dir):
     fig = plt.figure(figsize=(12,12))

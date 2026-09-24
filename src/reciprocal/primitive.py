@@ -2,10 +2,9 @@ import numpy as np
 from reciprocal.utils import (apply_symmetry_operators, lies_on_vertex, lies_on_poly,
                               name_vertices, lies_on_sym_line, rotation2D)
 from reciprocal.symmetry import Symmetry
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon, Circle
 import itertools
 import scipy.spatial
+from shapely.geometry import Point, Polygon
 
 def line(p1, p2):
     A = (p1[1] - p2[1])
@@ -29,12 +28,6 @@ def overlap(p1, p2):
         return True
     else:
         return False
-
-def pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
 
 def order_lexicographically(points, start=0.0):
     #angle = np.arctan2( points[:,1], points[:,0])
@@ -63,8 +56,10 @@ def sumtriangles(xy, z, triangles ):
     # z concave or convex => under or overestimates
     npt, dim = xy.shape
     ntri, dim1 = triangles.shape
-    assert npt == len(z), "shape mismatch: xy %s z %s" % (xy.shape, z.shape)
-    assert dim1 == dim+1, "triangles ? %s" % triangles.shape
+    if npt != len(z):
+        raise ValueError("shape mismatch: xy %s z %s" % (xy.shape, z.shape))
+    if dim1 != dim + 1:
+        raise ValueError("triangles must have dim + 1 columns: %s" % (triangles.shape,))
     zsum = np.zeros( z[0].shape )
     areasum = 0
     dimfac = np.prod( np.arange( 1, dim+1 ))
@@ -213,8 +208,7 @@ class Primitive():
         self.vertices = intersections
 
     def make_sampling(self, constraint = None):
-        irreducible_path = Polygon(self.vertices,
-                                   closed=True).get_path()
+        irreducible_polygon = Polygon(self.vertices)
 
         if constraint is None:
             constraint = {'type':'n_points', 'value':5}
@@ -277,8 +271,7 @@ class Primitive():
         for nx in range(-range_lim, range_lim):
             for ny in range(-range_lim, range_lim):
                 trial_point = nx*vec1 + ny*vec2
-                if not irreducible_path.contains_point(trial_point,
-                                                       radius=1e-7):
+                if not irreducible_polygon.buffer(1e-7).covers(Point(trial_point)):
                     continue
                 point_list.append(trial_point)
                 on_vertex, symmetry_point = lies_on_vertex(trial_point,

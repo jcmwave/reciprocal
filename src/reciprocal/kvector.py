@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.constants as constants
 class KVector(object):
 
     """
@@ -12,6 +11,8 @@ class KVector(object):
                  n=None, theta=None, phi=None, normal=None,
                  kx=None, ky=None, kz=None, weighting=None,
                  validate=True):
+        if not np.isfinite(wavelength) or wavelength <= 0:
+            raise ValueError("wavelength must be a finite positive number")
         self.wavelength = wavelength #scalar
         self.k0 = 2*np.pi/(self.wavelength)
         self.n = n
@@ -76,9 +77,11 @@ class KVector(object):
         return np.sign(self.kz)
 
     def getKZFromKXYNNormal(self):
-        return self.normal_*np.sqrt(np.clip( self.knorm**2 -self.kx**2 -self.ky**2,
-                                             a_min=0.,#,(self.knorm**2)*1e-12,
-                                             a_max=None))
+        radicand = self.knorm**2 - self.kx**2 - self.ky**2
+        tolerance = np.finfo(float).eps * max(1.0, abs(self.knorm**2)) * 16
+        if radicand < -tolerance:
+            raise ValueError("kx and ky exceed the magnitude set by n and wavelength")
+        return self.normal_ * np.sqrt(np.clip(radicand, a_min=0.0, a_max=None))
 
     def getThetaPhiFromK(self):
         kxy = np.sqrt( self.kx**2 + self.ky**2)
@@ -138,6 +141,10 @@ class KVectorGroup(object):
                  n=None, theta=None, phi=None, normal=None,
                  kx=None, ky=None, kz=None, validate=True, data=None,
                  weighting=None):
+        if not np.isfinite(wavelength) or wavelength <= 0:
+            raise ValueError("wavelength must be a finite positive number")
+        if not isinstance(n_rows, (int, np.integer)) or n_rows < 0:
+            raise ValueError("n_rows must be a non-negative integer")
         self.wavelength = wavelength #scalar
         self.k0 = 2*np.pi/(self.wavelength)
         self.n_rows = n_rows
@@ -209,11 +216,17 @@ class KVectorGroup(object):
         return np.sign(self.kz)
 
     def getKZFromKXYNNormal(self):
-        return self.normal_*np.sqrt(np.clip( np.power(self.knorm,2)
-                                            -np.power(self.kx,2)
-                                            -np.power(self.ky,2),
-                                             a_min=0., #(np.power(self.knorm,2))*1e-12,
-                                            a_max=None))
+        radicand = (
+            np.power(self.knorm, 2)
+            - np.power(self.kx, 2)
+            - np.power(self.ky, 2)
+        )
+        tolerance = np.finfo(float).eps * np.maximum(
+            1.0, np.abs(np.power(self.knorm, 2))
+        ) * 16
+        if np.any(radicand < -tolerance):
+            raise ValueError("kx and ky exceed the magnitude set by n and wavelength")
+        return self.normal_ * np.sqrt(np.clip(radicand, a_min=0.0, a_max=None))
 
     def getThetaPhiFromK(self):
         kxy = np.sqrt( np.power(self.kx,2) + np.power(self.ky,2))
@@ -304,7 +317,10 @@ class KVectorGroup(object):
                          validate=False)
 
     def __add__(self,other):
-        assert np.isclose(other.wavelength,self.wavelength)
+        if not isinstance(other, KVectorGroup):
+            return NotImplemented
+        if not np.isclose(other.wavelength, self.wavelength):
+            raise ValueError("cannot combine k-vector groups with different wavelengths")
         newNRows = self.n_rows + other.n_rows
         newData = np.concatenate( (self.data_,other.data_),axis=0)
         return KVectorGroup(self.wavelength,newNRows,
@@ -375,7 +391,7 @@ class BlochFamily(KVectorGroup):
         return_str += "weight:{},".format(self.weighting)
         return return_str
 
-class SymmetryFamily(Enum):
+class SymmetryFamilyColumns(Enum):
     symmetry = 8
 
 class SymmetryFamily(KVectorGroup):

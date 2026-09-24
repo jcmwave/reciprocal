@@ -20,6 +20,9 @@ projects.ini
 # notebook checkpoints
 .ipynb_checkpoints
 
+# all notebooks
+notebooks
+
 # jcm output files
 /tests/jcm_test_project/grid.jcm
 /tests/jcm_test_project/project_results
@@ -36,3 +39,7 @@ projects.ini
 _build
 _static
 _templates
+
+
+#plans dir
+/plans

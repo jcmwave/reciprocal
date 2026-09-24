@@ -7,7 +7,10 @@ from reciprocal.unit_cell import order_lexicographically
 from reciprocal.utils import BravaisLattice
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
-    return vector / np.linalg.norm(vector)
+    norm = np.linalg.norm(vector)
+    if not np.isfinite(norm) or np.isclose(norm, 0.0):
+        raise ValueError("lattice vectors must be finite and non-zero")
+    return vector / norm
 
 def angle_between(v1, v2):
     """ Returns the angle in radians between vectors 'v1' and 'v2'::
@@ -181,6 +184,18 @@ class LatticeVectors():
         -------
         LatticeVectors
         """
+        vector1 = np.asarray(vector1, dtype=float)
+        vector2 = np.asarray(vector2, dtype=float)
+        if vector1.shape != vector2.shape or vector1.ndim != 1 or vector1.size not in (2, 3):
+            raise ValueError("lattice vectors must have matching shape (2,) or (3,)")
+        if not np.all(np.isfinite(vector1)) or not np.all(np.isfinite(vector2)):
+            raise ValueError("lattice vectors must contain only finite values")
+        if np.isclose(np.linalg.norm(vector1), 0.0) or np.isclose(np.linalg.norm(vector2), 0.0):
+            raise ValueError("lattice vectors must be non-zero")
+        area = vector1[0] * vector2[1] - vector1[1] * vector2[0]
+        scale = np.linalg.norm(vector1) * np.linalg.norm(vector2)
+        if np.isclose(area, 0.0, atol=np.finfo(float).eps * scale, rtol=1e-12):
+            raise ValueError("lattice vectors must be linearly independent")
         self.vec1 = vector1
         self.vec2 = vector2
         self.angle = np.degrees(angle_between(vector1, vector2))
@@ -212,6 +227,12 @@ class LatticeVectors():
         -------
         LatticeVectors
         """
+        if not all(np.isfinite(value) for value in (length1, length2, angle)):
+            raise ValueError("lattice lengths and angle must be finite")
+        if length1 <= 0 or length2 <= 0:
+            raise ValueError("lattice lengths must be positive")
+        if not 0 < angle < 180:
+            raise ValueError("lattice angle must be strictly between 0 and 180 degrees")
         vectors = make_vectors(length1, length2, angle)
         return lat_vec(vectors[0], vectors[1])
 
@@ -225,25 +246,14 @@ class LatticeVectors():
         if self.vec1 is None or self.vec2 is None:
             self.make_vectors()
 
-        R = rotation2D(90)
-        a1 = self.vec1 #[0:2]
-        a2 = self.vec2 #[0:2]
-        if np.any( a2 == float('inf')) :
-            a2_ = np.array([0.0, 1.0, 0.])
-            b1 = (2*np.pi*R.dot(a2_)/ np.dot(a1,R.dot(a2_)))
-            b2 = (2*np.pi*R.dot(a1)/ np.dot(a2,R.dot(a1)))
-        else:
-            b1 = (2*np.pi*R.dot(a2)/ np.dot(a1,R.dot(a2)))
-            b2 = (2*np.pi*R.dot(a1)/ np.dot(a2,R.dot(a1)))
-        #b1 = np.array([b1[0],b1[1],0.0])
-        #b2 = np.array([b2[0],b2[1],0.0])
-
-        b1_norm = np.linalg.norm(b1)
-        b2_norm = np.linalg.norm(b2)
-        rl = LatticeVectors(vector1=b1, vector2=b2)
-        b1_new, b2_new = rl.get_shortest_vectors()
-        rl = LatticeVectors(vector1=b1_new, vector2=b2_new)
-        return rl
+        direct_basis = np.column_stack([self.vec1[:2], self.vec2[:2]])
+        reciprocal_basis = 2 * np.pi * np.linalg.inv(direct_basis).T
+        b1 = reciprocal_basis[:, 0]
+        b2 = reciprocal_basis[:, 1]
+        if self.vec1.size == 3:
+            b1 = np.append(b1, 0.0)
+            b2 = np.append(b2, 0.0)
+        return LatticeVectors(vector1=b1, vector2=b2)
 
     def get_shortest_vectors(self):
         """Return arrays of lattice vectors that are as short as possible.
@@ -380,23 +390,18 @@ class Lattice():
         -------
         Lattice
         """
-        lat_vec = None
-        try:
-            if "vector1" in kwargs and "vector2" in kwargs:
-                lat_vec = LatticeVectors(kwargs['vector1'], kwargs['vector2'])
-        except:
-            pass
-        try:
-            if ("length1" in kwargs and "length2" in kwargs
-                and "angle" in kwargs):
-                lat_vec = LatticeVectors.from_lengths_angle(kwargs['length1'],
-                                                            kwargs['length2'],
-                                                            kwargs['angle'])
-        except:
-            pass
-        if lat_vec is None:
-            raise ValueError("could not construct LatticeVectors from args: " +
-                             "{}".format(kwargs))
+        if "vector1" in kwargs and "vector2" in kwargs:
+            lat_vec = LatticeVectors(kwargs["vector1"], kwargs["vector2"])
+        elif all(key in kwargs for key in ("length1", "length2", "angle")):
+            lat_vec = LatticeVectors.from_lengths_angle(
+                kwargs["length1"], kwargs["length2"], kwargs["angle"]
+            )
+        else:
+            raise ValueError(
+                "expected vector1/vector2 or length1/length2/angle; got {}".format(
+                    sorted(kwargs)
+                )
+            )
         return lattice(lat_vec)
 
     def make_reciprocal(self):

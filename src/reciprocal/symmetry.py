@@ -62,22 +62,11 @@ def symmetry_from_type(symmetry):
     else:
         raise KeyError("unknown symmetry of type: {}".format(symmetry))
 
-def symmetry_from_alias(symmetry):
-    reflections = [PointSymmetry.SIGMA_D, PointSymmetry.SIGMA_V, PointSymmetry.SIGMA_H]
-    rotations = [PointSymmetry.C1, PointSymmetry.C2, PointSymmetry.C3,
-                 PointSymmetry.C4, PointSymmetry.C6]
-    translations = [PointSymmetry.T]
-    if symmetry in reflections:
-        return Reflection(symmetry)
-    elif symmetry in rotations:
-        return Rotation(symmetry)
-    elif symmetry in translations:
-        return Translation(symmetry)
-    else:
-        raise KeyError("unknown symmetry of type: {}".format(symmetry))
-
 def symmetry_from_alias(string):
-    stack = ALIASES[string]
+    try:
+        stack = ALIASES[string]
+    except KeyError as exc:
+        raise ValueError("unknown symmetry alias: {}".format(string)) from exc
     return SymmetryCombination(stack)
 
 class SymmetryCombination(object):

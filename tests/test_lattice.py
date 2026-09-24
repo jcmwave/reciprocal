@@ -48,6 +48,39 @@ def test_reciprocal_vectors():
     assert abs(rlat.vec2[0]-0.) < tol
     assert abs(rlat.vec2[1]-0.0072552) < tol
 
+
+@pytest.mark.parametrize("length1,length2,angle", [(2.0, 3.0, 40.0), (1.0, 1.0, 90.0)])
+def test_reciprocal_vector_identity(length1, length2, angle):
+    """Reciprocal vectors use radians per length: a_i dot b_j = 2*pi delta_ij."""
+    direct = lattice.LatticeVectors.from_lengths_angle(length1, length2, angle)
+    reciprocal = direct.reciprocal_vectors()
+
+    products = np.array(
+        [
+            [np.dot(direct.vec1, reciprocal.vec1), np.dot(direct.vec1, reciprocal.vec2)],
+            [np.dot(direct.vec2, reciprocal.vec1), np.dot(direct.vec2, reciprocal.vec2)],
+        ]
+    )
+    np.testing.assert_allclose(products, 2 * np.pi * np.eye(2), atol=1e-10)
+
+
+@pytest.mark.parametrize(
+    "length1,length2,angle,message",
+    [
+        (0.0, 1.0, 90.0, "positive"),
+        (1.0, 1.0, 0.0, "strictly between"),
+        (1.0, 1.0, 180.0, "strictly between"),
+    ],
+)
+def test_invalid_lattice_parameters(length1, length2, angle, message):
+    with pytest.raises(ValueError, match=message):
+        lattice.LatticeVectors.from_lengths_angle(length1, length2, angle)
+
+
+def test_parallel_lattice_vectors_are_rejected():
+    with pytest.raises(ValueError, match="linearly independent"):
+        lattice.LatticeVectors(np.array([1.0, 0.0]), np.array([2.0, 0.0]))
+
 def test_lattice():
     a = 1000.
     b = 1000.

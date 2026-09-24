@@ -1,9 +1,4 @@
 import numpy as np
-#import matplotlib as mpl
-from matplotlib import cm
-from matplotlib.patches import Wedge, Circle, Rectangle
-#import matplotlib.pyplot as plt
-#from matplotlib.patches import Polygon
 #from numpy.lib.scimath import sqrt as csqrt
 from copy import copy
 import scipy.spatial
@@ -18,9 +13,6 @@ from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_
 from reciprocal.utils import (order_lexicographically,
                               lies_on_poly, lies_on_vertex) #apply_symmetry_operators,
 from reciprocal.kvector import KVectorGroup, BlochFamily
-import warnings
-from shapely.errors import ShapelyDeprecationWarning
-warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 #from kspacesampling import KVector
 #from kspacesampling import BrillouinZone
 #from kspacesampling import Symmetry
@@ -50,7 +42,9 @@ def get_bloch_statistics(bloch_sampling):
         family_sizes[key] = n_siblings
     info['NKPoints'] = n_points_total
     info['FamilySizes'] = family_sizes
-    info['Speedup'] = info['NKPoints']/info['NFamilies']
+    info['Speedup'] = (
+        info['NKPoints'] / info['NFamilies'] if info['NFamilies'] else 0.0
+    )
     return info
 
 def spiral_arc_length(b, phi0, phi1):
@@ -102,6 +96,12 @@ class KSpace():
 
     def __init__(self, wavelength, symmetry=None, fermi_radius=None):
         #self.bzone = brillouinZone
+        if not np.isfinite(wavelength) or wavelength <= 0:
+            raise ValueError("wavelength must be a finite positive number")
+        if fermi_radius is not None and (
+            not np.isfinite(fermi_radius) or fermi_radius <= 0
+        ):
+            raise ValueError("fermi_radius must be a finite positive number")
         self.wavelength = wavelength
         self.k0 = np.pi*2/wavelength
         self.fermi_radius = fermi_radius
@@ -122,8 +122,8 @@ class KSpace():
         symmetry: string
         """
         sym = Symmetry.from_string(symmetry)
-        if periodic_sampler is not None:
-            lattice_sym = periodic_sampler.lattice.unit_cell.symmetry()
+        if self.periodic_sampler is not None:
+            lattice_sym = self.periodic_sampler.lattice.unit_cell.symmetry()
             if not lattice_sym.compatible(sym):
                 raise ValueError("symmetry {} ".format(sym)+
                                  "is not compatible with lattice symmetry"+
@@ -134,6 +134,7 @@ class KSpace():
                                  "than lattice symmetry"+
                                  " {}".format(lattice_sym))
         self.symmetry = sym
+        self.calc_symmetry_cone()
 
     def calc_symmetry_cone(self):
         """
@@ -220,9 +221,9 @@ class KSpace():
                 #     reduced_sym = self.symmetry.reduce()
                 # except ValueError:
                 reduced_sym = self.symmetry
-                points, operators = reduced_sym.apply_symmetry_operators(kxy)
+                points = reduced_sym.apply_symmetry_operators(kxyz)
             else:
-                points, operators = self.smmetry.apply_symmetry_operators(kxy)
+                points = self.symmetry.apply_symmetry_operators(kxyz)
             for sym_row in range(points.shape[0]):
                 point = points[sym_row, :]
                 symmetry_groups[sym_row].append(point)
@@ -383,6 +384,7 @@ class RegularSampler(Sampler):
         """
         if constraint is None:
             constraint = {'type':'n_points', 'value':5}
+        self._validate_constraint(constraint, len(vector_lengths))
         if constraint['type'] == "density":
             density = constraint['value']
             max_length = 1/(np.sqrt(density)*2)
@@ -412,6 +414,35 @@ class RegularSampler(Sampler):
 
         return n_grid_points
 
+    @staticmethod
+    def _validate_constraint(constraint, dimensions):
+        if not isinstance(constraint, dict):
+            raise TypeError("constraint must be a dictionary")
+        if "type" not in constraint or "value" not in constraint:
+            raise ValueError("constraint must contain 'type' and 'value'")
+        valid_types = {"density", "max_length", "n_points"}
+        if constraint["type"] not in valid_types:
+            raise ValueError(
+                "constraint type {} invalid, valid choices are: {}".format(
+                    constraint["type"], "|".join(sorted(valid_types))
+                )
+            )
+        values = np.asarray(constraint["value"])
+        if values.ndim > 1 or values.size not in (1, dimensions):
+            raise ValueError(
+                "constraint value must be a scalar or have one value per dimension"
+            )
+        try:
+            numeric_values = values.astype(float)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("constraint values must be numeric") from exc
+        if not np.all(np.isfinite(numeric_values)) or np.any(numeric_values <= 0):
+            raise ValueError("constraint values must be finite and positive")
+        if constraint["type"] == "n_points" and not np.all(
+            numeric_values == np.floor(numeric_values)
+        ):
+            raise ValueError("n_points constraint values must be integers")
+
     def _max_lengths_from_constraint(self, vector_lengths, constraint):
         """
         Return number of k space sampling points based on constraint
@@ -428,6 +459,7 @@ class RegularSampler(Sampler):
         """
         if constraint is None:
             constraint = {'type':'n_points', 'value':5}
+        self._validate_constraint(constraint, len(vector_lengths))
         if constraint['type'] == "density":
             density = constraint['value']
             max_length = 1/(np.sqrt(density)*2)
@@ -495,7 +527,9 @@ class RegularSampler(Sampler):
                     all_points.append(np.array([0., 0.]))
                     #center_circle_area = np.pi*(rad_spacing/2.)**2*opening_angle/(2*np.pi)
                     weighting.append(1.)
-                    artists.append(Circle((0.,0.), radius=rad_spacing/6., fill=False, edgecolor='k'))
+                    if return_artists:
+                        from matplotlib.patches import Circle
+                        artists.append(Circle((0.,0.), radius=rad_spacing/6., fill=False, edgecolor='k'))
                     step += 1
                     continue
 
@@ -515,7 +549,9 @@ class RegularSampler(Sampler):
 
                 weighting.append(1.)
                 all_points.append(trial_point)
-                artists.append(Circle((x, y), radius=rad_spacing/6., fill=False, edgecolor='k'))
+                if return_artists:
+                    from matplotlib.patches import Circle
+                    artists.append(Circle((x, y), radius=rad_spacing/6., fill=False, edgecolor='k'))
                 phi0 = phi1
                 step += 1
 
@@ -562,12 +598,14 @@ class RegularSampler(Sampler):
                 all_points.append(np.array([0., 0.]))
                 center_circle_area = np.pi*(rad_spacing/2.)**2*opening_angle/(2*np.pi)
                 weighting.append(center_circle_area/total_area)
-                if np.isclose(opening_angle, np.pi*2.):
-                    artists.append(Circle((0.,0.), radius=rad_spacing/2., fill=False, edgecolor='k'))
-                else:
-                    artists.append(Wedge((0.,0.), rad_spacing/2., 0.,
-                                    np.degrees(opening_angle),
-                                    fill=False, edgecolor='k'))
+                if return_artists:
+                    from matplotlib.patches import Circle, Wedge
+                    if np.isclose(opening_angle, np.pi*2.):
+                        artists.append(Circle((0.,0.), radius=rad_spacing/2., fill=False, edgecolor='k'))
+                    else:
+                        artists.append(Wedge((0.,0.), rad_spacing/2., 0.,
+                                        np.degrees(opening_angle),
+                                        fill=False, edgecolor='k'))
                 continue
             radius = rad_spacing*n_r
             upper_radius = rad_spacing*(n_r+0.5)
@@ -595,10 +633,12 @@ class RegularSampler(Sampler):
                 #print(upper_radius, lower_radius, phi_spacing, wedge_area/total_area)
                 weighting.append(wedge_area/total_area)
                 all_points.append(trial_point)
-                wedge = Wedge(np.array([0., 0.]), upper_radius,
-                              phi-phi_spacing*0.5, phi+phi_spacing*0.5,
-                              width=upper_radius-lower_radius, fill=False)
-                artists.append(wedge)
+                if return_artists:
+                    from matplotlib.patches import Wedge
+                    wedge = Wedge(np.array([0., 0.]), upper_radius,
+                                  phi-phi_spacing*0.5, phi+phi_spacing*0.5,
+                                  width=upper_radius-lower_radius, fill=False)
+                    artists.append(wedge)
 
         all_point_array = np.vstack(all_points)
         all_point_array, sort_indices = order_lexicographically(all_point_array,
@@ -620,9 +660,11 @@ class RegularSampler(Sampler):
         vector_lengths = np.array([self.kspace.fermi_radius, self.kspace.fermi_radius])
         if restrict_to_sym_cone:
             opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
-            wedge = Wedge((0., 0.), r=self.kspace.fermi_radius*2, theta1=0.,
-                          theta2=np.degrees(opening_angle))
-            wedge_vertices = wedge._path._vertices
+            arc_angles = np.linspace(0.0, opening_angle, 128)
+            wedge_vertices = np.column_stack(
+                [np.cos(arc_angles), np.sin(arc_angles)]
+            ) * (self.kspace.fermi_radius * 2)
+            wedge_vertices = np.vstack([[0.0, 0.0], wedge_vertices, [0.0, 0.0]])
             wedge_polygon = Polygon(wedge_vertices)
             #print("Wedge: {}".format(wedge_polygon))
         else:
@@ -666,7 +708,6 @@ class RegularSampler(Sampler):
                                                       opening_angle):
                         continue
                 rect_center = (nx-0.5)*vector1 + (ny-0.5)*vector2 + central_point
-                square = Rectangle(rect_center, vector_lengths[0], vector_lengths[1])
                 if restrict_to_sym_cone:
                     #square_vertices = square._path._vertices
                     #square_vertices = [rect_center-np.array([vector_lengths[0], 0.])*0.5]
@@ -683,14 +724,17 @@ class RegularSampler(Sampler):
                     #print(type(intersect))
                     xy = np.array(intersect.boundary.xy)
                     #new_patch = Polygon(xy.T)
-                    new_patch = square
                     #print("Trial Point: {}".format(trial_point))
                     #print("Square Polygon: {}".format(square_polygon))
                     #print("Intersection: {}".format(intersect))
                     #new_patch = PolygonPatch(intersect)
-                    artists.append(new_patch)
+                    if return_artists:
+                        from matplotlib.patches import Rectangle
+                        artists.append(Rectangle(rect_center, vector_lengths[0], vector_lengths[1]))
                 else:
-                    artists.append(square)
+                    if return_artists:
+                        from matplotlib.patches import Rectangle
+                        artists.append(Rectangle(rect_center, vector_lengths[0], vector_lengths[1]))
                     weighting.append(vector_lengths[0]*vector_lengths[1]/total_area)
                 all_points.append(trial_point)
 
@@ -1050,6 +1094,14 @@ class PeriodicSampler(Sampler):
             return all_kvs, all_values
 
     def plotSymmetryFamilies(self,ax,n='all',color=None):
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib import cm
+        except ImportError as exc:
+            raise ImportError(
+                "plotting requires the optional 'plot' extra: "
+                "pip install reciprocal[plot]"
+            ) from exc
         if self.symmetry_families is None:
             self.calcKSampling()
 
@@ -1120,8 +1172,10 @@ def sum_triangles(xy, z, triangles):
     # z concave or convex => under or overestimates
     npt, dim = xy.shape
     ntri, dim1 = triangles.shape
-    assert npt == len(z), "shape mismatch: xy %s z %s" % (xy.shape, z.shape)
-    assert dim1 == dim+1, "triangles ? %s" % triangles.shape
+    if npt != len(z):
+        raise ValueError("shape mismatch: xy %s z %s" % (xy.shape, z.shape))
+    if dim1 != dim + 1:
+        raise ValueError("triangles must have dim + 1 columns: %s" % (triangles.shape,))
     zsum = np.zeros( z[0].shape )
     areasum = 0
     dimfac = np.prod( np.arange( 1, dim+1 ))

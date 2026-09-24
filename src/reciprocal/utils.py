@@ -14,7 +14,8 @@ def rotation2D(theta):
 
 def rotation3D(theta,axis):
     axes = ['X','Y','Z']
-    assert axis in axes
+    if axis not in axes:
+        raise ValueError("axis must be one of 'X', 'Y', or 'Z'")
     theta = np.radians(theta)
     c, s = np.cos(theta), np.sin(theta)
     tol = 1e-6
@@ -44,7 +45,7 @@ def reflection2D(axis):
         return np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
     elif axis == 'xy':
         return np.array([[0., 1., 0.], [1., 0., 0.], [0., 0., 1.]])
-    return None
+    raise ValueError("axis must be one of 'x', 'y', or 'xy'")
 
 def translation2D(vector):
     t = np.array([[1., 0., vector[0]],
@@ -101,7 +102,8 @@ def name_vertices(vertices, named_points):
             if (np.isclose(vertex[0], point[0]) and
                 np.isclose(vertex[1], point[1])):
                 named_vertices.append((name, vertex))
-    assert len(named_vertices) == vertices.shape[0]
+    if len(named_vertices) != vertices.shape[0]:
+        raise ValueError("every vertex must match exactly one named point")
     return named_vertices
 
 
