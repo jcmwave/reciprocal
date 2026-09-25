@@ -1,6 +1,16 @@
 import pytest
-from reciprocal import lattice
+from reciprocal import BravaisLattice, lattice
 import numpy as np
+
+
+def test_bravais_lattice_uses_standard_two_dimensional_names():
+    assert {member.name for member in BravaisLattice} == {
+        "OBLIQUE",
+        "RECTANGULAR",
+        "CENTERED_RECTANGULAR",
+        "SQUARE",
+        "HEXAGONAL",
+    }
 
 
 def test_lattice_vectors_lengths():

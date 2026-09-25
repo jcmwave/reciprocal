@@ -1,8 +1,8 @@
 from enum import Enum
 
 class BravaisLattice(Enum):
-    HEXAGON: int
+    HEXAGONAL: int
     SQUARE: int
-    RECTANGLE: int
+    RECTANGULAR: int
     OBLIQUE: int
-    RHOMBUS: int
+    CENTERED_RECTANGULAR: int

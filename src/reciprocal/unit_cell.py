@@ -261,7 +261,7 @@ class UnitCell():
         length2 = self.vectors.length2
         angle = self.vectors.angle
         co_angle = 180. - angle
-        if self.lattice.bravais is BravaisLattice.HEXAGON:
+        if self.lattice.bravais is BravaisLattice.HEXAGONAL:
             GM = length1*0.5
             special_points[SpecialPoint.K] = np.array([GM/np.cos(np.pi/6.0),0., 0.])
             special_points[SpecialPoint.M] = np.array([GM*np.cos(np.pi/6.0),
@@ -269,7 +269,7 @@ class UnitCell():
         elif self.lattice.bravais is BravaisLattice.SQUARE:
             special_points[SpecialPoint.X] = 0.5*vec1
             special_points[SpecialPoint.M] = 0.5*(vec1+vec2)
-        elif self.lattice.bravais is  BravaisLattice.RECTANGLE:
+        elif self.lattice.bravais is  BravaisLattice.RECTANGULAR:
             special_points[SpecialPoint.X] = 0.5*vec1
             special_points[SpecialPoint.M] = 0.5*(vec1+vec2)
             special_points[SpecialPoint.Y] = 0.5*vec2
@@ -288,7 +288,7 @@ class UnitCell():
                 special_points[SpecialPoint.Y1] = 0.5*vec2
                 special_points[SpecialPoint.Y2] = -0.5*vec2
                 special_points[SpecialPoint.H2] = 0.5*(vec1-vec2)
-        elif self.lattice.bravais is BravaisLattice.RHOMBUS:
+        elif self.lattice.bravais is BravaisLattice.CENTERED_RECTANGULAR:
             pass
         else:
             raise ValueError("bravais lattice {}".format(self.lattice.bravais)+
@@ -742,9 +742,9 @@ class UnitCell():
         d3 = sigma_h + c3
         d4 = sigma_h + c4
         d6 = sigma_h + c6
-        symmetries = {BravaisLattice.HEXAGON:d6,
+        symmetries = {BravaisLattice.HEXAGONAL:d6,
                       BravaisLattice.SQUARE:d4,
-                      BravaisLattice.RECTANGLE:d2,
+                      BravaisLattice.RECTANGULAR:d2,
                       BravaisLattice.OBLIQUE:c2}
 
 
@@ -776,22 +776,22 @@ class UnitCell():
         d4 = sigma_h + c4
         d6 = sigma_h + c6
 
-        symmetries[SpecialPoint.GAMMA] = {BravaisLattice.HEXAGON:d6,
+        symmetries[SpecialPoint.GAMMA] = {BravaisLattice.HEXAGONAL:d6,
                                           BravaisLattice.SQUARE:d4,
-                                          BravaisLattice.RECTANGLE:d2,
+                                          BravaisLattice.RECTANGULAR:d2,
                                           BravaisLattice.OBLIQUE:c2}
 
-        symmetries[SpecialPoint.K] = {BravaisLattice.HEXAGON:sigma_h}
+        symmetries[SpecialPoint.K] = {BravaisLattice.HEXAGONAL:sigma_h}
 
-        symmetries[SpecialPoint.M]  = {BravaisLattice.HEXAGON:sigma_h,
+        symmetries[SpecialPoint.M]  = {BravaisLattice.HEXAGONAL:sigma_h,
                                        BravaisLattice.SQUARE:sigma_h,
-                                       BravaisLattice.RECTANGLE:c1}
+                                       BravaisLattice.RECTANGULAR:c1}
 
         symmetries[SpecialPoint.X] = {BravaisLattice.SQUARE:sigma_h,
-                                      BravaisLattice.RECTANGLE:sigma_h,
+                                      BravaisLattice.RECTANGULAR:sigma_h,
                                       BravaisLattice.OBLIQUE:c1}
 
-        symmetries[SpecialPoint.Y] = {BravaisLattice.RECTANGLE:sigma_h}
+        symmetries[SpecialPoint.Y] = {BravaisLattice.RECTANGULAR:sigma_h}
 
         symmetries[SpecialPoint.Y1] = {BravaisLattice.OBLIQUE:c1}
         symmetries[SpecialPoint.Y2] = {BravaisLattice.OBLIQUE:c1}
@@ -800,17 +800,17 @@ class UnitCell():
         symmetries[SpecialPoint.H3] = {BravaisLattice.OBLIQUE:c1}
         symmetries[SpecialPoint.C] = {BravaisLattice.OBLIQUE:c1}
 
-        symmetries[SpecialPoint.AXIS] = {BravaisLattice.HEXAGON:sigma_h,
+        symmetries[SpecialPoint.AXIS] = {BravaisLattice.HEXAGONAL:sigma_h,
                                          BravaisLattice.SQUARE:sigma_h,
-                                         BravaisLattice.RECTANGLE:sigma_h,
+                                         BravaisLattice.RECTANGULAR:sigma_h,
                                          BravaisLattice.OBLIQUE:c2}
-        symmetries[SpecialPoint.EXTERIOR] = {BravaisLattice.HEXAGON:c1,
+        symmetries[SpecialPoint.EXTERIOR] = {BravaisLattice.HEXAGONAL:c1,
                                              BravaisLattice.SQUARE:c1,
-                                             BravaisLattice.RECTANGLE:c1,
+                                             BravaisLattice.RECTANGULAR:c1,
                                              BravaisLattice.OBLIQUE:c1}
-        symmetries[SpecialPoint.INTERIOR] = {BravaisLattice.HEXAGON:c1,
+        symmetries[SpecialPoint.INTERIOR] = {BravaisLattice.HEXAGONAL:c1,
                                              BravaisLattice.SQUARE:c1,
-                                             BravaisLattice.RECTANGLE:c1,
+                                             BravaisLattice.RECTANGULAR:c1,
                                              BravaisLattice.OBLIQUE:c1}
 
         symmetry_regions = {}

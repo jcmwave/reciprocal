@@ -454,13 +454,11 @@ class Lattice():
             atol=tolerances.absolute,
         )
         if equal_lengths and is_120:
-            bv_lat = BravaisLattice.HEXAGON
+            bv_lat = BravaisLattice.HEXAGONAL
         elif equal_lengths and is_90:
             bv_lat = BravaisLattice.SQUARE
         elif is_90 or rectangular_projection:
-            bv_lat = BravaisLattice.RECTANGLE
-        # elif np.isclose(length1, length2):
-        #     bv_lat = BravaisLattice.RHOMBUS
+            bv_lat = BravaisLattice.RECTANGULAR
         else:
             bv_lat = BravaisLattice.OBLIQUE
         return bv_lat

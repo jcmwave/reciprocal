@@ -78,4 +78,4 @@ def test_bravais_classification_is_scale_invariant(scale):
     square = Lattice(LatticeVectors.from_lengths_angle(scale, scale, 90.0))
     rectangle = Lattice(LatticeVectors.from_lengths_angle(scale, 2 * scale, 90.0))
     assert square.bravais.name == "SQUARE"
-    assert rectangle.bravais.name == "RECTANGLE"
+    assert rectangle.bravais.name == "RECTANGULAR"

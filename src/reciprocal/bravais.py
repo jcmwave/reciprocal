@@ -6,8 +6,12 @@ from enum import Enum
 class BravaisLattice(Enum):
     """Supported two-dimensional Bravais-lattice types."""
 
-    HEXAGON = 0
-    SQUARE = 1
-    RECTANGLE = 2
-    OBLIQUE = 3
-    RHOMBUS = 4
+    OBLIQUE = 0
+    RECTANGULAR = 1
+    CENTERED_RECTANGULAR = 2
+    SQUARE = 3
+    HEXAGONAL = 4
+
+
+
+
