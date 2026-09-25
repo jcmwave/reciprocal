@@ -1,5 +1,5 @@
 import numpy as np
-from enum import Enum
+
 def rotation2D(theta):
     theta = np.radians(theta)
     c, s = np.cos(theta), np.sin(theta)
@@ -127,10 +127,3 @@ def order_lexicographically(points, start=0.0, return_sort_indices=False):
         return points[sort_indices, :], sort_indices
     else:
         return points[sort_indices, :]
-
-class BravaisLattice(Enum):
-    HEXAGON = 0
-    SQUARE = 1
-    RECTANGLE = 2
-    OBLIQUE = 3
-    RHOMBUS = 4

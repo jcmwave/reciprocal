@@ -6,13 +6,13 @@ the optional Matplotlib dependency.
 
 from importlib.metadata import PackageNotFoundError, version
 
+from .bravais import BravaisLattice
 from .kspace import KSpace
 from .kvector import BlochFamily, KVector, KVectorGroup
 from .lattice import Lattice, LatticeVectors
 from .numerics import DEFAULT_TOLERANCES, Tolerances
 from .symmetry import PointSymmetry, SpecialPoint, Symmetry, SymmetryCombination
 from .unit_cell import UnitCell
-from .utils import BravaisLattice
 
 try:
     __version__ = version("reciprocal")

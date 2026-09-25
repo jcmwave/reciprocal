@@ -1,8 +1,9 @@
 import numpy as np
 
+from reciprocal.bravais import BravaisLattice
 from reciprocal.numerics import DEFAULT_TOLERANCES, Tolerances
 from reciprocal.unit_cell import UnitCell, order_lexicographically
-from reciprocal.utils import BravaisLattice, rotation2D
+from reciprocal.utils import rotation2D
 
 
 def unit_vector(vector):

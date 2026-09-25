@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import reciprocal
+from reciprocal.bravais import BravaisLattice
 from reciprocal.canvas import Canvas
 
 
@@ -30,6 +31,7 @@ def test_documented_public_api_is_stable():
     assert set(reciprocal.__all__) == expected
     for name in expected:
         assert hasattr(reciprocal, name)
+    assert reciprocal.BravaisLattice is BravaisLattice
 
 
 def test_import_does_not_install_global_warning_filters():

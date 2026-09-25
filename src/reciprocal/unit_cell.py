@@ -1,9 +1,9 @@
 import numpy as np
+from reciprocal.bravais import BravaisLattice
 from reciprocal.utils import (lies_on_vertex, lies_on_poly,
                               name_vertices, lies_on_sym_line, rotation2D, rotation3D,
                               order_lexicographically)
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
-from reciprocal.utils import BravaisLattice
 from reciprocal.numerics import DEFAULT_TOLERANCES
 from scipy.spatial.distance import cdist
 

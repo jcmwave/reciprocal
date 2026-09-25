@@ -3,9 +3,9 @@ from typing import Literal
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from .bravais import BravaisLattice
 from .numerics import Tolerances
 from .unit_cell import UnitCell
-from .utils import BravaisLattice
 
 FloatArray = NDArray[np.float64]
 
