@@ -4,13 +4,12 @@ from reciprocal.utils import (lies_on_vertex, lies_on_poly,
                               order_lexicographically)
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
 from reciprocal.utils import BravaisLattice
-#import matplotlib.pyplot as plt
+from reciprocal.numerics import DEFAULT_TOLERANCES
 from scipy.spatial.distance import cdist
 
 import shapely.geometry
 from shapely.geometry.point import Point
 from shapely.geometry.polygon import LinearRing, Polygon
-#from matplotlib.patches import Polygon, Circle
 import itertools
 from itertools import tee
 from collections import OrderedDict
@@ -105,7 +104,6 @@ def find_intersections(vertices, n_closest):
             my_intersection = np.array([inter[0], inter[1], 0.])
             #distance = np.round(np.linalg.norm(my_intersection), 9)#
             distance = np.linalg.norm(my_intersection)
-            #print(closest[0], distance, my_intersection)
             for ic in range(n_closest):
                 if np.isclose(distance, closest[ic], rtol=1e-6, atol=length_scale*1e-9):
                     break
@@ -305,7 +303,12 @@ class UnitCell():
         vec2 = self.vectors.vec2
         angle = self.vectors.angle
         vertices = make_perpendicular_lines(vec1, vec2)
-        if np.isclose(self.vectors.length1, self.vectors.length2):
+        if np.isclose(
+            self.vectors.length1,
+            self.vectors.length2,
+            rtol=DEFAULT_TOLERANCES.relative,
+            atol=DEFAULT_TOLERANCES.absolute,
+        ):
             n_closest = 1
         else:
             n_closest = 2
@@ -408,12 +411,9 @@ class UnitCell():
         t_sym = self.translational_symmetry()
         extended_special_points = OrderedDict()
         for special_point, symmetry in self.special_points.items():
-            #print(special_point)
             point = self.special_points[special_point]
-            #print(point)
             extended_points = t_sym.apply_symmetry_operators(point)
             extended_points = self.crop_to_bz(extended_points)
-            #print(extended_points)
             extended_special_points[special_point] = np.atleast_2d(extended_points)
         return extended_special_points
 
@@ -507,7 +507,6 @@ class UnitCell():
             # range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
             n = np.max(n_grid_points)
             n += int(n/2.)
-            #print(n)
             # if n_grid_points[0] == 1:
             #     range1 = np.arange(0, range_lim1, 1, dtype=np.int64)
             #     range2 = np.arange(0, range_lim2, 1, dtype=np.int64)
@@ -563,7 +562,6 @@ class UnitCell():
         weighting = sample[1]
         int_element = sample[2]
         sym_ops = sample[3]
-        #print("sym ops: {}".format(sym_ops))
         all_points = []
         for row in range(irreducible_sampling.shape[0]):
             point = np.concatenate([irreducible_sampling[row, :], np.array([0.])])
@@ -587,11 +585,6 @@ class UnitCell():
                             point4 = refl_rot_points[row4, :]
                             point_diff = np.linalg.norm(point4[:2]-point3[:2])
                             if point_diff < 1e-6:
-                                #print(point4)
-                                #print(point2, point3, point4)
-                                #print(point2)
-                                #print(row2, row3, row4)
-                                #print(translated)
                                 to_keep[row4] =False
 
             all_points.append(refl_rot_points[to_keep, :])
@@ -643,7 +636,6 @@ class UnitCell():
             n_grid_points[0] = 1
         if n_grid_points[1] == 0:
             n_grid_points[1] = 1
-        #print(n_grid_points)
         return n_grid_points
 
     def _max_lengths_from_constraint(self, constraint):
@@ -682,7 +674,6 @@ class UnitCell():
             else:
                 max_length2 = self.vectors.length2/(n_grid_points[1]*2-2)
             max_lengths = np.array([max_length1, max_length2])
-        #print(n_grid_points)
         return max_lengths
 
     def integration_element(self, constraint):
@@ -773,7 +764,6 @@ class UnitCell():
 
         #representative_lengths = cdist(points, points)
         representative_lengths = np.array([bbox[2]-bbox[0], bbox[3]-bbox[1]])
-        #print(representative_lengths)
         representative_length = np.min(representative_lengths) ##np.amin(representative_lengths[~np.eye(representative_lengths.shape[0],dtype=bool)])
         special_points = list(self.special_points.keys())
         special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
@@ -787,7 +777,7 @@ class UnitCell():
             on_vertex, special_point = lies_on_vertex(trial_point,
                                                        self.special_points)
             if on_vertex:
-                if not special_point is SpecialPoint.Y2:
+                if special_point is not SpecialPoint.Y2:
                     ipoly_samp[special_point].append(trial_point)
             elif p.intersects(bz):
                 ipoly_samp[SpecialPoint.EXTERIOR].append(trial_point)
@@ -796,7 +786,6 @@ class UnitCell():
             else:
                 ipoly_samp[SpecialPoint.INTERIOR].append(trial_point)
             #all_points.append(trial_point)
-        #print(ipoly_samp)
         for special_point in special_points:
             if len(ipoly_samp[special_point]) > 0:
                 ipoly_samp[special_point] = np.array(ipoly_samp[special_point])
@@ -808,10 +797,7 @@ class UnitCell():
         all_weights = []
         refl_rot_syms = self.refl_rot_symmetries()
         ext_special_points = self.extend_special_points()
-        #print(ext_special_points)
         total_sym = self.symmetry()
-        #print(trans_syms)
-        #print(ipoly_samp)
         for symmetry in refl_rot_syms:
             if symmetry not in ipoly_samp:
                 continue
@@ -832,7 +818,6 @@ class UnitCell():
                 all_points.append(point)
                 all_weights.append(total_weight)
                 #remaining_symmetry = self.symmetry()-symm
-                #print("remaining_symmetry: {}".format(remaining_symmetry))
                 #if symmetry in trans_syms:
                 all_sym_ops.append((symm, self.translational_symmetry()))
                 #else:
@@ -850,7 +835,6 @@ class UnitCell():
             remaining_sym = self.symmetry()-sym
             #if np.isinf(weight):
             #    weight = 1.0/(max_sym*2)
-            #print(remaining_sym)
             weighting[ii] = (remaining_sym.get_n_symmetry_ops()/self.symmetry().get_n_symmetry_ops())
         #weighting/np.sum(weighting)
         return weighting
@@ -890,7 +874,6 @@ class UnitCell():
             weight = point_symmetry.get_n_symmetry_ops()/max_sym
             if np.isinf(weight):
                 weight = 1.0/(max_sym*2)
-            #print(point_symmetry, point_symmetry.get_n_symmetry_ops(), weight)
             weights += (weight*np.ones(n_points)).tolist()
         weights = np.array(weights)/n_points
         return weights

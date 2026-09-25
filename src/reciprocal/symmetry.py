@@ -436,7 +436,7 @@ class Translation(Symmetry):
         """
         return number of translations for the symmetry op inside the BZ
         """
-        raise NotImplemented("n translations undefined")
+        raise NotImplementedError("n translations undefined")
         #translations = {PointSymmetry.T:1}
         #return translations[self.group]
 
@@ -455,7 +455,6 @@ class Translation(Symmetry):
                 range2 = np.arange(-n[1][0]+1,n[1][1],1)
         else:
             raise AttributeError(f"wrong type for input n: {type(n)}")
-        #print(range1, range2)
         new_points = []
         points = np.atleast_2d(points)
         for row in range(points.shape[0]):
@@ -484,7 +483,7 @@ class Translation(Symmetry):
         #     return new_points
 
     def get_symmetry_cone_angle(self):
-        raise NotImplemented("symmetry cone angle undefined for translational symmetry")
+        raise NotImplementedError("symmetry cone angle undefined for translational symmetry")
 
     def compatible(self, other):
         if not isinstance(self, type(other)):
@@ -496,7 +495,7 @@ class Translation(Symmetry):
         return False
 
     def __sub__(self, other):
-        raise NotImplemented("subtraction of translation symmetry undefined")
+        raise NotImplementedError("subtraction of translation symmetry undefined")
         if not self.compatible(other):
             raise ValueError("cannot subtract translations that are not compatible")
         n_trans_self = self.get_n_translations()-1

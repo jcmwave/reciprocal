@@ -3,6 +3,7 @@ from importlib import reload
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 
 import reciprocal
 from reciprocal.canvas import Canvas
@@ -10,10 +11,21 @@ from reciprocal.canvas import Canvas
 
 def test_documented_public_api_is_stable():
     expected = {
-        "BlochFamily", "BravaisLattice", "KSpace", "KVector",
-        "KVectorGroup", "Lattice", "LatticeVectors", "PointSymmetry",
-        "SpecialPoint", "Symmetry", "SymmetryCombination", "SymmetryFamily",
-        "UnitCell", "__version__",
+        "BlochFamily",
+        "BravaisLattice",
+        "DEFAULT_TOLERANCES",
+        "KSpace",
+        "KVector",
+        "KVectorGroup",
+        "Lattice",
+        "LatticeVectors",
+        "PointSymmetry",
+        "SpecialPoint",
+        "Symmetry",
+        "SymmetryCombination",
+        "Tolerances",
+        "UnitCell",
+        "__version__",
     }
     assert set(reciprocal.__all__) == expected
     for name in expected:
@@ -34,4 +46,15 @@ def test_canvas_uses_the_supplied_axes_without_changing_current_axes():
     assert canvas.fig is figure
     assert handle.axes is second
     assert plt.gca() is first
+    plt.close(figure)
+
+
+def test_misspelled_plotting_name_has_deprecation_path(monkeypatch):
+    figure, axes = plt.subplots()
+    canvas = Canvas(axes)
+    called = []
+    monkeypatch.setattr(canvas, "plot_tessellation", lambda *args, **kwargs: called.append(True))
+    with pytest.warns(DeprecationWarning, match="plot_tessellation"):
+        canvas.plot_tesselation(object())
+    assert called == [True]
     plt.close(figure)

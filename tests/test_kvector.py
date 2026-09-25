@@ -56,3 +56,32 @@ def test_groups_with_different_wavelengths_cannot_be_combined():
     second = KVectorGroup(2.0, 1, kx=[0.0], ky=[0.0], kz=[1.0])
     with pytest.raises(ValueError, match="different wavelengths"):
         first + second
+
+
+@pytest.mark.parametrize(
+    "order,expected",
+    [
+        ("ascending", [-0.5, 0.0, 0.75]),
+        ("descending", [0.75, 0.0, -0.5]),
+    ],
+)
+def test_group_sort_respects_direction(order, expected):
+    group = KVectorGroup(
+        2 * np.pi,
+        3,
+        kx=[-0.5, 0.75, 0.0],
+        ky=[0.0, 0.0, 0.0],
+        n=[1.0, 1.0, 1.0],
+        normal=[1.0, 1.0, 1.0],
+    )
+
+    group.sort("kx", order=order)
+
+    np.testing.assert_allclose(group.kx, expected)
+
+
+def test_camel_case_method_has_deprecation_path():
+    vector = KVector(2 * np.pi, kx=0.0, ky=0.0, kz=1.0)
+    assert vector.get_n_from_k() == pytest.approx(1.0)
+    with pytest.warns(DeprecationWarning, match="get_n_from_k"):
+        assert vector.getNFromK() == pytest.approx(1.0)

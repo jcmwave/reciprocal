@@ -1,31 +1,25 @@
-import numpy as np
-#from numpy.lib.scimath import sqrt as csqrt
-from copy import copy
-import scipy.spatial
-#import shapely.geometry
-import scipy.optimize
-#from shapely.geometry.point import Point
-#from shapely.geometry.linestring import LineString
-from shapely.geometry.polygon import Polygon
-#from descartes import PolygonPatch
 from abc import ABC
-from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
-from reciprocal.utils import (order_lexicographically,
-                              lies_on_poly, lies_on_vertex) #apply_symmetry_operators,
-from reciprocal.kvector import KVectorGroup, BlochFamily
-#from kspacesampling import KVector
-#from kspacesampling import BrillouinZone
-#from kspacesampling import Symmetry
-#import kspacesampling
+from copy import copy
+import warnings
 
-def test_for_duplicates(old_points, new_point):
-    already_included = False
-    for kk, sampled in enumerate(old_points):
-        if np.isclose(new_point, sampled,rtol=1e-2,atol=1e-4).all():
-            already_included = True
-            if already_included:
-                return True
-    return False
+import numpy as np
+import scipy.optimize
+import scipy.spatial
+from shapely.geometry.polygon import Polygon
+
+from reciprocal.kvector import BlochFamily, KVectorGroup
+from reciprocal.numerics import contains_close_point
+from reciprocal.symmetry import PointSymmetry, SpecialPoint, Symmetry, symmetry_from_type
+from reciprocal.utils import lies_on_poly, lies_on_vertex, order_lexicographically
+
+def test_for_duplicates(old_points, new_point, rtol=1e-9, atol=0.0):
+    """Compatibility wrapper for vectorized duplicate detection."""
+    return contains_close_point(
+        old_points,
+        new_point,
+        relative_tolerance=rtol,
+        absolute_tolerance=atol,
+    )
 
 def get_bloch_statistics(bloch_sampling):
     info = {}
@@ -61,7 +55,6 @@ def compare_arc_length(x, b, phi0, goal_length):
     arc_length = spiral_arc_length(b, phi0, x[0])
     #jac = jac_compare_arc_length(x, b)
     #return_val = np.array([goal_length-arc_length, jac])
-    #print(return_val)
     return arc_length-goal_length
 
 def jac_compare_arc_length(x, b):
@@ -318,24 +311,6 @@ class Sampler(ABC):
             return True
         return False
 
-class PseudoRandomSampler(Sampler):
-
-    """
-    class to obtain a psuedo-random k space sampling
-
-    kspace(Kspace): reference to parent kspace
-    """
-
-    def __init__(self, kspace):
-        """
-        Parameters
-        ----------
-        kspace: dispersion.kspace.KSpace
-            reference to parent kspace
-        """
-        super().__init__(kspace)
-
-
 class RegularSampler(Sampler):
 
     """
@@ -361,11 +336,8 @@ class RegularSampler(Sampler):
         elif grid_type == 'circular':
             sampling_output = self._sample_circular(constraint, center, cutoff_tol,
                                            restrict_to_sym_cone, return_artists)
-        elif grid_type == 'spiral':
-            sampling_output = self._sample_spiral(constraint, center, cutoff_tol,
-                                           restrict_to_sym_cone, return_artists)
         else:
-            raise ValueError("unknown grid type: {}, allowed types |cartesian|circular|spiral".format(grid_type))
+            raise ValueError("unknown grid type: {}, allowed types |cartesian|circular".format(grid_type))
         return sampling_output
 
     def _npoints_from_constraint(self, vector_lengths, constraint):
@@ -481,95 +453,6 @@ class RegularSampler(Sampler):
 
         return max_lengths
 
-    def _sample_spiral(self, constraint, center, cutoff_tol,
-                          restrict_to_sym_cone, return_artists):
-        vector1 = np.array([self.kspace.fermi_radius, 0.])
-        vector_lengths = np.array([self.kspace.fermi_radius])
-        if restrict_to_sym_cone:
-            opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
-        else:
-            opening_angle = 2*np.pi
-
-        n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
-        #print("n grid points: {}".format(n_grid_points))
-        radial_range = range(0, n_grid_points[0])
-
-        #circumference = np.pi*2*self.kspace.fermi_radius
-        #n_phis = self._npoints_from_constraint([circumference], constraint)
-
-        all_points = []
-        weighting = []
-        artists = []
-        rad_spacing = vector_lengths[0]/(n_grid_points[0]-0.5)*3.
-        #print("rad spacing: {}".format(rad_spacing))
-        a = 0.
-        b = rad_spacing/(np.pi*2.0)
-        if center:
-            raise ValueError("center no supported for spiral grids")
-
-        total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
-
-
-        step = 0
-        for spiral_n in range(3):
-            if spiral_n == 0:
-                rotation = 0.
-            elif spiral_n == 1:
-                rotation = np.pi*2/3.
-            elif spiral_n == 2:
-                rotation = np.pi*2*2./3.
-            phi0 = 0.
-            current_outer_radius = 0.
-            while current_outer_radius < self.kspace.fermi_radius:
-                #for n_r in radial_range:
-                #print(step, spiral_n)
-                if step == 0:
-                    all_points.append(np.array([0., 0.]))
-                    #center_circle_area = np.pi*(rad_spacing/2.)**2*opening_angle/(2*np.pi)
-                    weighting.append(1.)
-                    if return_artists:
-                        from matplotlib.patches import Circle
-                        artists.append(Circle((0.,0.), radius=rad_spacing/6., fill=False, edgecolor='k'))
-                    step += 1
-                    continue
-
-                opt_fun = lambda x: compare_arc_length(x, b, phi0, rad_spacing*0.333)
-                opt_jac = lambda x: jac_compare_arc_length(x, b)
-                x0 = np.array([phi0])
-                res = scipy.optimize.root_scalar(opt_fun, x0=x0, fprime=opt_jac, method='newton')
-                phi1 = res.root[0]
-                current_outer_radius = b*phi1
-
-                x = current_outer_radius*np.cos(phi1+rotation)
-                y = current_outer_radius*np.sin(phi1+rotation)
-                trial_point = np.array([x, y])
-                length = np.linalg.norm(trial_point)
-                if length > self.kspace.fermi_radius*(1-cutoff_tol):
-                    break
-
-                weighting.append(1.)
-                all_points.append(trial_point)
-                if return_artists:
-                    from matplotlib.patches import Circle
-                    artists.append(Circle((x, y), radius=rad_spacing/6., fill=False, edgecolor='k'))
-                phi0 = phi1
-                step += 1
-
-        all_point_array = np.vstack(all_points)
-        all_point_array, sort_indices = order_lexicographically(all_point_array,
-                                                       return_sort_indices=True)
-        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
-        weighting_array = np.array(weighting)
-        weighting_array /= np.sum(weighting_array)
-        #weighting_array /= total_area
-        weighting_array = weighting_array[sort_indices]
-        if return_artists:
-            artists = np.array(artists)
-            artists = artists[sort_indices]
-            return all_kvs, weighting_array, artists
-        else:
-            return all_kvs, weighting_array
-
     def _sample_circular(self, constraint, center, cutoff_tol,
                           restrict_to_sym_cone, return_artists):
         vector1 = np.array([self.kspace.fermi_radius, 0.])
@@ -630,7 +513,6 @@ class RegularSampler(Sampler):
                     pass
                     #continue
                 wedge_area = 0.5*(upper_radius**2-lower_radius**2)*np.radians(phi_spacing)
-                #print(upper_radius, lower_radius, phi_spacing, wedge_area/total_area)
                 weighting.append(wedge_area/total_area)
                 all_points.append(trial_point)
                 if return_artists:
@@ -666,7 +548,6 @@ class RegularSampler(Sampler):
             ) * (self.kspace.fermi_radius * 2)
             wedge_vertices = np.vstack([[0.0, 0.0], wedge_vertices, [0.0, 0.0]])
             wedge_polygon = Polygon(wedge_vertices)
-            #print("Wedge: {}".format(wedge_polygon))
         else:
             opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
@@ -679,7 +560,6 @@ class RegularSampler(Sampler):
         weighting = []
         artists = []
         total_area = np.pi*self.kspace.fermi_radius**2*opening_angle/(2*np.pi)
-        #print(max_lengths)
         vector1 = np.array([max_lengths[0], 0.])
         vector2 = np.array([0., max_lengths[1]])
         vector_lengths = max_lengths
@@ -721,12 +601,8 @@ class RegularSampler(Sampler):
                     intersect = wedge_polygon.intersection(square_polygon)
                     weight = intersect.area
                     weighting.append(weight)
-                    #print(type(intersect))
                     xy = np.array(intersect.boundary.xy)
                     #new_patch = Polygon(xy.T)
-                    #print("Trial Point: {}".format(trial_point))
-                    #print("Square Polygon: {}".format(square_polygon))
-                    #print("Intersection: {}".format(intersect))
                     #new_patch = PolygonPatch(intersect)
                     if return_artists:
                         from matplotlib.patches import Rectangle
@@ -800,7 +676,6 @@ class PeriodicSampler(Sampler):
         opening_angle = self.kspace.symmetry.get_symmetry_cone_angle()
         woods_kvs = []
 
-        #print(vec1, vec2)
         vlength = self.lattice.vectors.length1
         phis = np.linspace(0, np.pi*2., n_points+1)[:-1]
 
@@ -945,7 +820,6 @@ class PeriodicSampler(Sampler):
         #range1 = range(-n_unit_cells1, n_unit_cells1+1)
         n_unit_cells2 = int(np.ceil(self.kspace.fermi_radius/(0.5*self.lattice.vectors.length2)))
         n_max = int(np.max([n_unit_cells1, n_unit_cells2]))
-        #print("n_max: {}".format(n_max))
         #range2 = range(-n_unit_cells2, n_unit_cells2+1)
         all_points = []
         bloch_families = {}
@@ -1093,7 +967,7 @@ class PeriodicSampler(Sampler):
             all_values = all_values[sorting]
             return all_kvs, all_values
 
-    def plotSymmetryFamilies(self,ax,n='all',color=None):
+    def plot_symmetry_families(self, ax, n='all', color=None):
         try:
             from matplotlib import cm
         except ImportError as exc:
@@ -1129,6 +1003,7 @@ class PeriodicSampler(Sampler):
                 family = self.symmetry_families[i][0]
                 color = colors[i].reshape(1,4)
                 ax.scatter(family[:,0],family[:,1],c=color)
+
         if color == "Frombloch_families":
             #nBFs = np.amax(np.array(list(self.bloch_families.keys())))
             #nBFs = len(self.bloch_families.keys())
@@ -1147,6 +1022,15 @@ class PeriodicSampler(Sampler):
             for i in range(nPoints):
                 family = self.symmetry_families[i][0]
                 ax.scatter(family[:,0],family[:,1],c=color)
+
+    def plotSymmetryFamilies(self, ax, n='all', color=None):
+        """Deprecated alias for :meth:`plot_symmetry_families`."""
+        warnings.warn(
+            "plotSymmetryFamilies is deprecated; use plot_symmetry_families",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.plot_symmetry_families(ax, n=n, color=color)
 
 
 def sum_triangles(xy, z, triangles):
@@ -1187,36 +1071,4 @@ def sum_triangles(xy, z, triangles):
         areasum += area
     return (zsum, areasum)
 
-class Interpolator():
 
-    """
-    class to obtain k space sampling based on periodic structures
-
-    lattice(Lattice): a reciprocal lattice used to generate the k-space sampling
-    kspace(Kspace): reference to parent kspace
-    """
-
-    def __init__(self, kspace, sample_points, values):
-        """
-        Parameters
-        ----------
-        kspace: reciprocal.kspace.KSpace
-            reference to parent kspace
-        sample_points: reciprocal.kvector.KVectorGroup
-            the points in kpsace to interpolate over
-        values: <N,1> np.ndarray of floats
-            the function values to interpolate
-        """
-        self.kspace = kspace
-        self.sample_points = sample_points
-        self.values = values
-
-    def _triangulate(self):
-        xi = self.sample_points.k[:,[0,1]]
-        self.triangulation = scipy.spatial.Delaunay(xi)
-
-    def _integrate(self):
-        zsum, areasum = sum_triangles(self.sample_points.k[:,[0, 1]],
-                                      self.values,
-                                      self.triangulation.vertices)
-        return zsum, areasum

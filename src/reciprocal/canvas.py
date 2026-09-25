@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 import copy
+import warnings
 from matplotlib.patches import RegularPolygon, Polygon, Rectangle, Circle, Wedge
 from matplotlib.collections import PatchCollection, RegularPolyCollection
 import matplotlib.cm as cm
@@ -367,10 +368,21 @@ class Canvas():
         self._plot_lattice(lattice, patch_generator, orders=orders,
                            label_orders=label_orders)
 
-    def plot_tesselation(self, lattice, orders=None, label_orders=False, **kwargs):
+    def plot_tessellation(self, lattice, orders=None, label_orders=False, **kwargs):
         patch_generator = self._get_poly_patch
         self._plot_lattice(lattice, patch_generator, orders=orders,
                            label_orders=label_orders, **kwargs)
+
+    def plot_tesselation(self, lattice, orders=None, label_orders=False, **kwargs):
+        """Deprecated misspelling of :meth:`plot_tessellation`."""
+        warnings.warn(
+            "plot_tesselation is deprecated; use plot_tessellation",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.plot_tessellation(
+            lattice, orders=orders, label_orders=label_orders, **kwargs
+        )
 
     def plot_lattice_distance_groups(self, lattice, max_order=2, label_orders=False):
         patch_generator = self._get_poly_patch
@@ -378,7 +390,6 @@ class Canvas():
         n_groups = len(groups)
         for ig, group in enumerate(groups):
             color = choose_color(ig, n_groups).flatten()
-            #print(ig, color)
             self._plot_lattice(lattice, patch_generator, orders=group,
                                label_orders=label_orders, facecolor=color,
                                increase_bbox=False)
@@ -554,11 +565,8 @@ class Canvas():
         norm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
         n_families = 0
         for family_number, family in sorted(bloch_families.items()):
-            #print(family_number)
-            #print(family)
             if n_families >= plot_n_families:
                 return
-            #print("plot family")
             color = choose_color(family_number, plot_n_families)
             label = "Bloch Family {}".format(family_number+1)
             try:
@@ -610,7 +618,6 @@ class Canvas():
         handle = self.ax.scatter(points[:, 0], points[:, 1], color=point_colors,
                                  marker=marker, label=label)
         #if legend:
-        #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
         return handle
 
     def plot_point_sampling_weighted(self, points, weighting,
@@ -638,7 +645,6 @@ class Canvas():
 
         norm = mpl.colors.Normalize(vmin=np.min(weighting),
                                     vmax=np.max(weighting))
-        #print(np.min(weighting), np.max(weighting))
         point_colors = []
         point_colors = weighting[:plot_n_points]
 
@@ -652,8 +658,6 @@ class Canvas():
                                  points[:plot_n_points, 1], c=point_colors,
                                  marker=marker, label=label, norm=norm)
         #if legend:
-        #    plt.legend(bbox_to_anchor=[1.01,0.99], loc='upper left')
-        #plt.colorbar()
         return handle
 
     def plot_interpolation(self, kpoints, values):

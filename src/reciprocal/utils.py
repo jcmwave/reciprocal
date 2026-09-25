@@ -1,6 +1,5 @@
 import numpy as np
 from enum import Enum
-import pprint
 def rotation2D(theta):
     theta = np.radians(theta)
     c, s = np.cos(theta), np.sin(theta)
@@ -124,13 +123,6 @@ def order_lexicographically(points, start=0.0, return_sort_indices=False):
     radius = np.linalg.norm(points, axis=1)
     angle[np.isclose(radius, 0.)] = -np.pi
     sort_indices = np.lexsort((radius, angle))
-    #sort_indices = np.argsort(angle)
-    all_data = np.round(np.vstack([points.T, angle, radius]).T, 3)
-    #pp = pprint.PrettyPrinter(indent=4, width=120)
-    #pp.pprint("x, y, z, angle, radius")
-    #pp.pprint(all_data)
-    #pp.pprint("x, y, z, angle, radius")
-    #pp.pprint(all_data[sort_indices, :])
     if return_sort_indices:
         return points[sort_indices, :], sort_indices
     else:

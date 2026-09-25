@@ -39,6 +39,15 @@ available for compatibility, but the names exported directly from
   obtained from their properties as views: copy them before modifying data
   that the object should retain.
 
+Numerical comparisons use the immutable `reciprocal.DEFAULT_TOLERANCES`
+policy. Length and coordinate comparisons are relative by default, angular
+comparisons have an absolute tolerance in degrees, and lattice degeneracy is
+tested through the dimensionless normalized cross product. Construct a
+`Tolerances` value and pass it to methods such as
+`Lattice.determine_bravais_lattice()` when measurement resolution requires a
+different policy. Point duplicate detection also accepts explicit relative and
+absolute tolerances.
+
 Invalid dimensions, non-finite values, non-positive lengths, and degenerate
 lattices raise `ValueError`.
 
@@ -105,3 +114,30 @@ No archival publication is assigned to this software. In publications, cite
 “Reciprocal, version 1.0.0, JCMwave,
 https://github.com/jcmwave/reciprocal” and include the access date. The
 installed version is available as `reciprocal.__version__`.
+
+## Development and reproducibility
+
+Run the same checks used by CI with:
+
+```console
+python -m ruff check .
+python -m ruff format --check src/reciprocal/__init__.py src/reciprocal/numerics.py examples tests/conftest.py tests/test_numerics.py tests/test_properties.py tests/test_public_api.py
+python -m mypy
+python -m pytest
+```
+
+The pre-commit configuration runs linting, import sorting, formatting, and the
+public API type check; its pre-push stage runs unit tests. Property tests use
+fixed Hypothesis generation and cover reciprocal-basis, symmetry, domain, and
+constant-integration invariants.
+
+Figure tests force Matplotlib's non-interactive backend, write only below
+pytest temporary directories, and close all figures. Golden documentation
+images, if added later, must be generated and committed through an explicit
+documentation update rather than a unit-test side effect.
+
+New code uses snake-case method names. Compatibility aliases such as
+`KVector.getNFromK()`, `Canvas.plot_tesselation()`, and
+`PeriodicSampler.plotSymmetryFamilies()` remain available for the 1.x series
+but emit `DeprecationWarning`; use `get_n_from_k()`, `plot_tessellation()`, and
+`plot_symmetry_families()` respectively.

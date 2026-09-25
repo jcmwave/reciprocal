@@ -1,6 +1,9 @@
 from typing import Literal
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+
+from .numerics import Tolerances
 from .unit_cell import UnitCell
 from .utils import BravaisLattice
 
@@ -28,5 +31,5 @@ class Lattice:
     @classmethod
     def from_lat_vec_args(cls, **kwargs: object) -> Lattice: ...
     def make_reciprocal(self) -> Lattice: ...
-    def determine_bravais_lattice(self) -> BravaisLattice: ...
+    def determine_bravais_lattice(self, tolerances: Tolerances | None = ...) -> BravaisLattice: ...
     def orders_by_distance(self, max_order: int) -> tuple[list[FloatArray], FloatArray]: ...

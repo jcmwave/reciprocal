@@ -1,8 +1,5 @@
 import pytest
 import numpy as np
-import os
-import shutil
-import reciprocal
 from reciprocal.kspace import KSpace
 from reciprocal.canvas import Canvas, choose_color
 from reciprocal.lattice import LatticeVectors, Lattice
@@ -45,7 +42,7 @@ def get_symmetry(shape):
 @pytest.fixture(autouse=True, scope="session")
 def figures_dir(tmp_path_factory):
     figures_dir = tmp_path_factory.mktemp("figures")
-    yield str(figures_dir)
+    yield figures_dir
     generated = list(figures_dir.glob("*.png"))
     assert generated, "figure tests did not generate any images"
     assert all(path.stat().st_size > 0 for path in generated)
@@ -61,15 +58,15 @@ def test_real_space_lattice_only(figures_dir):
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
-        canvas.plot_tesselation(lat)
+        canvas.plot_tessellation(lat)
         canvas.plot_lattice(lat)
         plt.xlabel('x')
         plt.ylabel('y')
         plt.xlim([-2, 2])
         plt.ylim([-2, 2])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "01_test_real_space_lattice_only.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "01_test_real_space_lattice_only.png"
+    fig.savefig(fig_path)
 
 def test_real_space_lattice_sampled(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -81,19 +78,17 @@ def test_real_space_lattice_sampled(figures_dir):
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
-        canvas.plot_tesselation(lat)
+        canvas.plot_tessellation(lat)
         #canvas.plot_lattice(lat)
         sampling, weighting, int_element = lat.unit_cell.sample(use_symmetry=False)
         canvas.plot_point_sampling(sampling)
-        print(np.unique(weighting))
-        print(np.sum(weighting*int_element)/lat.unit_cell.area())
         plt.xlabel('x')
         plt.ylabel('y')
         plt.xlim([-2, 2])
         plt.ylim([-2, 2])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "02_test_real_space_lattice_sampled.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "02_test_real_space_lattice_sampled.png"
+    fig.savefig(fig_path)
 
 def test_reciprocal_lattice_only(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -106,7 +101,7 @@ def test_reciprocal_lattice_only(figures_dir):
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_vectors(rlat)
         canvas.plot_irreducible_uc(rlat.unit_cell)
         canvas.plot_special_points(rlat.unit_cell)
@@ -117,8 +112,8 @@ def test_reciprocal_lattice_only(figures_dir):
         plt.xlim([-10, 10])
         plt.ylim([-10, 10])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "02_test_reciprocal_lattice_only.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "02_test_reciprocal_lattice_only.png"
+    fig.savefig(fig_path)
 
 def test_weighted_sampling_of_ibz_no_symmetry(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -133,65 +128,57 @@ def test_weighted_sampling_of_ibz_no_symmetry(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         #print("lattice lengths: [{} {}]".format(rlat.vectors.length1, rlat.vectors.length2))
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         constraint = {'type':'n_points', 'value':5}
         sampling, weighting, int_element = rlat.unit_cell.sample(use_symmetry=False,
                                                                 constraint=constraint)
         #print(sampling)
         #print("integration element: {}".format(int_element))
-        print("unique weighting: {}".format(np.unique(weighting)))
         #print(np.sum(weighting))
         #print(weighting)
         canvas.plot_point_sampling_weighted(sampling, weighting)
         full_area = rlat.unit_cell.area()
         weight_sum = np.sum(int_element*weighting)
-        print("Area of reciprocal lattice: {:.6f}".format(rlat.unit_cell.area()))
-        print("integration value check: {:.6f}".format(weight_sum/rlat.unit_cell.area()))
         #print("simple check: {}".format(full_area/int_element))
         plt.xlabel('kx')
         plt.ylabel('ky')
         plt.xlim([-5, 5])
         plt.ylim([-5, 5])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "04_test_weighted_sampling_of_ibz_no_symmetry.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "04_test_weighted_sampling_of_ibz_no_symmetry.png"
+    fig.savefig(fig_path)
 
 def test_weighted_sampling_of_ibz_with_symmetry(figures_dir):
     fig = plt.figure(figsize=(12,12))
     gs = gridspec.GridSpec(2, 2, fig, wspace=0.4, hspace=0.4)
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
-        print(lat_shape)
         index =  np.unravel_index(ilat, (2,2))
         ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         sampling, weighting, int_element, sym_ops = rlat.unit_cell.sample_irreducible()
 
-        print("integration element: {:.6f}".format(int_element))
-        print("unique weighting: {}".format(np.unique(weighting)))
         canvas.plot_point_sampling_weighted(sampling, weighting)
         full_area = rlat.unit_cell.area()
         weight_sum = np.sum(int_element*weighting)
         symmetry_multiplier = rlat.unit_cell.symmetry().get_n_symmetry_ops()
-        print("integration value check: {:.6f}".format(symmetry_multiplier*weight_sum/full_area))
         plt.xlabel('kx')
         plt.ylabel('ky')
         plt.xlim([-5, 5])
         plt.ylim([-5, 5])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "05_test_weighted_sampling_of_ibz_with_symmetry.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "05_test_weighted_sampling_of_ibz_with_symmetry.png"
+    fig.savefig(fig_path)
 
 def test_bz_smapling_with_symmetry(figures_dir):
     fig = plt.figure(figsize=(12,12))
     gs = gridspec.GridSpec(2, 2, fig, wspace=0.4, hspace=0.4)
 
     for ilat, lat_shape in enumerate(['square', 'rectangle', 'hexagon', 'oblique']):
-        print(lat_shape)
         index =  np.unravel_index(ilat, (2,2))
         ax = fig.add_subplot(gs[index])
         canvas = Canvas(ax=ax)
@@ -199,7 +186,7 @@ def test_bz_smapling_with_symmetry(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         #print("lattice lengths: [{} {}]".format(rlat.vectors.length1, rlat.vectors.length2))
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_vectors(rlat)
         constraint = {'type':'n_points', 'value':4}
         sampling, weighting, int_element = rlat.unit_cell.sample(use_symmetry=True,
@@ -211,15 +198,14 @@ def test_bz_smapling_with_symmetry(figures_dir):
         canvas.plot_point_sampling_weighted(sampling, weighting)
         #full_area = rlat.unit_cell.area()
         weight_sum = np.sum(weighting)
-        print("integration value check: {}".format(weight_sum))
         #print("simple check: {}".format(full_area/int_element))
         plt.xlabel('kx')
         plt.ylabel('ky')
         plt.xlim([-7, 7])
         plt.ylim([-7, 7])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "06_test_bz_with_symmetry.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "06_test_bz_with_symmetry.png"
+    fig.savefig(fig_path)
 
 def lorentz(gamma, x0, x):
     return (1./np.pi) * 0.5*gamma / ( (x-x0)**2 + (0.5*gamma)**2)
@@ -259,15 +245,15 @@ def test_rlattice_in_kspace(figures_dir):
         lat_vec = get_lattice_vectors(lat_shape)
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_lattice(rlat)
         plt.xlabel('x')
         plt.ylabel('y')
         plt.xlim([-10, 10])
         plt.ylim([-10, 10])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "07_test_rlattice_in_kspace.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "07_test_rlattice_in_kspace.png"
+    fig.savefig(fig_path)
 
 def test_bloch_families_in_kspace(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -284,7 +270,7 @@ def test_bloch_families_in_kspace(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_fermi_circle(kspace)
         families = kspace.periodic_sampler.sample_bloch_families()
         canvas.plot_bloch_families(families)
@@ -296,8 +282,8 @@ def test_bloch_families_in_kspace(figures_dir):
         plt.xlim([-15, 15])
         plt.ylim([-15, 15])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "08_test_bloch_families_in_kspace.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "08_test_bloch_families_in_kspace.png"
+    fig.savefig(fig_path)
 
 
 def test_bloch_families_in_sym_cone(figures_dir):
@@ -315,7 +301,7 @@ def test_bloch_families_in_sym_cone(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_fermi_circle(kspace)
         families = kspace.periodic_sampler.sample_bloch_families(restrict_to_sym_cone=True)
         canvas.plot_bloch_families(families)
@@ -327,8 +313,8 @@ def test_bloch_families_in_sym_cone(figures_dir):
         plt.xlim([-15, 15])
         plt.ylim([-15, 15])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "09_test_bloch_families_in_sym_cone.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "09_test_bloch_families_in_sym_cone.png"
+    fig.savefig(fig_path)
 
 
 
@@ -347,7 +333,7 @@ def test_symmetrised_bloch_families_in_kspace(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_fermi_circle(kspace)
         sampling = kspace.periodic_sampler.sample(restrict_to_sym_cone=True, constraint={'type':'n_points', 'value':4})
         #canvas.plot_sampling(sampling.k,  color='k')
@@ -366,8 +352,8 @@ def test_symmetrised_bloch_families_in_kspace(figures_dir):
         plt.xlim([-15, 15])
         plt.ylim([-15, 15])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "10_test_symmetrised_bloch_families_in_kspace.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "10_test_symmetrised_bloch_families_in_kspace.png"
+    fig.savefig(fig_path)
 
 
 def test_woods_anomalies_no_symmetry(figures_dir):
@@ -385,7 +371,7 @@ def test_woods_anomalies_no_symmetry(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_fermi_circle(kspace)
         woods1 = kspace.periodic_sampler.calc_woods_anomalies(1, n_refinements = 4, restrict_to_sym_cone=True)
         cmap = mpl.colormaps['tab20']
@@ -401,8 +387,8 @@ def test_woods_anomalies_no_symmetry(figures_dir):
         plt.xlim([-15, 15])
         plt.ylim([-15, 15])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "11_woods_anomalies_no_symmetry.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "11_woods_anomalies_no_symmetry.png"
+    fig.savefig(fig_path)
 
 def test_woods_anomalies_with_symmetry(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -419,7 +405,7 @@ def test_woods_anomalies_with_symmetry(figures_dir):
         lat = Lattice(lat_vec)
         rlat = lat.make_reciprocal()
         kspace.apply_lattice(rlat)
-        canvas.plot_tesselation(rlat)
+        canvas.plot_tessellation(rlat)
         canvas.plot_fermi_circle(kspace)
         woods1 = kspace.periodic_sampler.calc_woods_anomalies(1, n_refinements = 4, restrict_to_sym_cone=True)
         cmap = mpl.colormaps['tab20']
@@ -439,8 +425,8 @@ def test_woods_anomalies_with_symmetry(figures_dir):
         plt.xlim([-15, 15])
         plt.ylim([-15, 15])
         plt.title(lat_shape, fontsize=20)
-    fig_path = os.path.join(figures_dir, "12_woods_anomalies_with_symmetry.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "12_woods_anomalies_with_symmetry.png"
+    fig.savefig(fig_path)
 
 
 def test_regular_circular_sampling_of_kspace(figures_dir):
@@ -466,11 +452,11 @@ def test_regular_circular_sampling_of_kspace(figures_dir):
         grid_type="circular",
         constraint=constraint
     )
-    print(sampling)
     canvas.plot_point_sampling_weighted(sampling, weighting)
 
-    fig_path = os.path.join(figures_dir, "13_test_regular_circular_sampling_of_kspace.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "13_test_regular_circular_sampling_of_kspace.png"
+    fig.savefig(fig_path)
+
 
 def test_regular_cartesian_sampling_of_kspace(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -495,11 +481,10 @@ def test_regular_cartesian_sampling_of_kspace(figures_dir):
         grid_type="cartesian",
         constraint=constraint
     )
-    print(sampling)
     canvas.plot_point_sampling_weighted(sampling, weighting)
 
-    fig_path = os.path.join(figures_dir, "14_test_regular_cartesian_sampling_of_kspace.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "14_test_regular_cartesian_sampling_of_kspace.png"
+    fig.savefig(fig_path)
 
 def test_regular_cartesian_sampling_with_artists_of_kspace(figures_dir):
     fig = plt.figure(figsize=(12,12))
@@ -533,5 +518,5 @@ def test_regular_cartesian_sampling_with_artists_of_kspace(figures_dir):
     artists = PatchCollection(artists, facecolor='none', lw=0.1)
     ax.add_collection(artists)
 
-    fig_path = os.path.join(figures_dir, "15_test_regular_cartesian_sampling_of_kspace_with_artists.png")
-    plt.savefig(fig_path)
+    fig_path = figures_dir / "15_test_regular_cartesian_sampling_of_kspace_with_artists.png"
+    fig.savefig(fig_path)

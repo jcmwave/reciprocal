@@ -1,14 +1,14 @@
 import numpy as np
-#import matplotlib.pyplot as plt
-#from enum import Enum
-from reciprocal.unit_cell import UnitCell
-from reciprocal.utils import rotation2D
-from reciprocal.unit_cell import order_lexicographically
-from reciprocal.utils import BravaisLattice
+
+from reciprocal.numerics import DEFAULT_TOLERANCES, Tolerances
+from reciprocal.unit_cell import UnitCell, order_lexicographically
+from reciprocal.utils import BravaisLattice, rotation2D
+
+
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     norm = np.linalg.norm(vector)
-    if not np.isfinite(norm) or np.isclose(norm, 0.0):
+    if not np.isfinite(norm) or norm == 0.0:
         raise ValueError("lattice vectors must be finite and non-zero")
     return vector / norm
 
@@ -190,11 +190,11 @@ class LatticeVectors():
             raise ValueError("lattice vectors must have matching shape (2,) or (3,)")
         if not np.all(np.isfinite(vector1)) or not np.all(np.isfinite(vector2)):
             raise ValueError("lattice vectors must contain only finite values")
-        if np.isclose(np.linalg.norm(vector1), 0.0) or np.isclose(np.linalg.norm(vector2), 0.0):
+        if np.linalg.norm(vector1) == 0.0 or np.linalg.norm(vector2) == 0.0:
             raise ValueError("lattice vectors must be non-zero")
         area = vector1[0] * vector2[1] - vector1[1] * vector2[0]
         scale = np.linalg.norm(vector1) * np.linalg.norm(vector2)
-        if np.isclose(area, 0.0, atol=np.finfo(float).eps * scale, rtol=1e-12):
+        if abs(area) / scale <= DEFAULT_TOLERANCES.degeneracy:
             raise ValueError("lattice vectors must be linearly independent")
         self.vec1 = vector1
         self.vec2 = vector2
@@ -263,7 +263,12 @@ class LatticeVectors():
         (2,) tuple of (3,)<np.double> np.array
         """
         n_shortest = 1
-        if np.isclose(self.length1, self.length2):
+        if np.isclose(
+            self.length1,
+            self.length2,
+            rtol=DEFAULT_TOLERANCES.relative,
+            atol=DEFAULT_TOLERANCES.absolute,
+        ):
             first = 2
             second = 2
             n_shortest = 2
@@ -414,7 +419,7 @@ class Lattice():
         r_vectors = self.vectors.reciprocal_vectors()
         return Lattice(r_vectors, lattice_type='reciprocal')
 
-    def determine_bravais_lattice(self):
+    def determine_bravais_lattice(self, tolerances=None):
         """
         determines the 2D bravais lattice of the unit cell
 
@@ -425,16 +430,33 @@ class Lattice():
         -------
         BravaisLattice
         """
+        if tolerances is None:
+            tolerances = DEFAULT_TOLERANCES
+        if not isinstance(tolerances, Tolerances):
+            raise TypeError("tolerances must be a Tolerances instance")
         length1 = self.vectors.length1
         length2 = self.vectors.length2
         angle = self.vectors.angle
         co_angle = 180. - angle
-        if np.isclose(length1, length2) and np.isclose(angle, 120.):
+        equal_lengths = np.isclose(
+            length1,
+            length2,
+            rtol=tolerances.relative,
+            atol=tolerances.absolute,
+        )
+        is_120 = np.isclose(angle, 120.0, rtol=0.0, atol=tolerances.angle_degrees)
+        is_90 = np.isclose(angle, 90.0, rtol=0.0, atol=tolerances.angle_degrees)
+        rectangular_projection = np.isclose(
+            length2 * np.cos(np.radians(co_angle)),
+            length1,
+            rtol=tolerances.relative,
+            atol=tolerances.absolute,
+        )
+        if equal_lengths and is_120:
             bv_lat = BravaisLattice.HEXAGON
-        elif np.isclose(length1, length2) and np.isclose(angle, 90.):
+        elif equal_lengths and is_90:
             bv_lat = BravaisLattice.SQUARE
-        elif (np.isclose(angle, 90.) or
-              np.isclose(length2*np.cos(np.radians(co_angle)), length1)):
+        elif is_90 or rectangular_projection:
             bv_lat = BravaisLattice.RECTANGLE
         # elif np.isclose(length1, length2):
         #     bv_lat = BravaisLattice.RHOMBUS

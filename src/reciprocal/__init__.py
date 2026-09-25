@@ -7,8 +7,9 @@ the optional Matplotlib dependency.
 from importlib.metadata import PackageNotFoundError, version
 
 from .kspace import KSpace
-from .kvector import BlochFamily, KVector, KVectorGroup, SymmetryFamily
+from .kvector import BlochFamily, KVector, KVectorGroup
 from .lattice import Lattice, LatticeVectors
+from .numerics import DEFAULT_TOLERANCES, Tolerances
 from .symmetry import PointSymmetry, SpecialPoint, Symmetry, SymmetryCombination
 from .unit_cell import UnitCell
 from .utils import BravaisLattice
@@ -21,6 +22,7 @@ except PackageNotFoundError:  # Source checkout used without installation.
 __all__ = [
     "BlochFamily",
     "BravaisLattice",
+    "DEFAULT_TOLERANCES",
     "KSpace",
     "KVector",
     "KVectorGroup",
@@ -30,7 +32,7 @@ __all__ = [
     "SpecialPoint",
     "Symmetry",
     "SymmetryCombination",
-    "SymmetryFamily",
+    "Tolerances",
     "UnitCell",
     "__version__",
 ]

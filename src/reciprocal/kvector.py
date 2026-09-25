@@ -1,4 +1,9 @@
+from enum import Enum
+import warnings
+
 import numpy as np
+
+
 class KVector(object):
 
     """
@@ -24,13 +29,13 @@ class KVector(object):
         self.kz = kz
         self.weighting = weighting
         if validate:
-            combination = self.validateData()
-            self.completeData(combination)
+            combination = self.validate_data()
+            self.complete_data(combination)
 
     def __repr__(self):
         return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
 
-    def validateData(self):
+    def validate_data(self):
         validCombinations = []
         validCombinations.append([self.kx,self.ky,self.kz])
         validCombinations.append([self.kx,self.ky,self.n,self.normal_])
@@ -48,55 +53,86 @@ class KVector(object):
             raise ValueError("not enough information to uniquely determine plane wave")
         return combination
 
-    def completeData(self,combination):
+    def complete_data(self,combination):
         if combination == 0:
             "all 3 k components are given"
-            self.n = self.getNFromK()
-            self.normal_ = self.getNormalFromK()
-            thetaPhi = self.getThetaPhiFromK()
+            self.n = self.get_n_from_k()
+            self.normal_ = self.get_normal_from_k()
+            thetaPhi = self.get_theta_phi_from_k()
             self.theta = thetaPhi[0]
             self.phi = thetaPhi[1]
         if combination == 1:
             "kx,ky plus n and normal"
-            self.kz = self.getKZFromKXYNNormal()
-            thetaPhi = self.getThetaPhiFromK()
+            self.kz = self.get_kz_from_kxy_n_normal()
+            thetaPhi = self.get_theta_phi_from_k()
             self.theta = thetaPhi[0]
             self.phi = thetaPhi[1]
         if combination == 2:
             "theta,phi plus n and normal"
-            kxyz = self.getKFromThetaPhiNNormal()
+            kxyz = self.get_k_from_theta_phi_n_normal()
             self.kx = kxyz[0]
             self.ky = kxyz[1]
             self.kz = kxyz[2]
 
 
-    def getNFromK(self):
+    def get_n_from_k(self):
         return np.linalg.norm(self.k)/self.k0
 
-    def getNormalFromK(self):
+    def get_normal_from_k(self):
         return np.sign(self.kz)
 
-    def getKZFromKXYNNormal(self):
+    def get_kz_from_kxy_n_normal(self):
         radicand = self.knorm**2 - self.kx**2 - self.ky**2
         tolerance = np.finfo(float).eps * max(1.0, abs(self.knorm**2)) * 16
         if radicand < -tolerance:
             raise ValueError("kx and ky exceed the magnitude set by n and wavelength")
         return self.normal_ * np.sqrt(np.clip(radicand, a_min=0.0, a_max=None))
 
-    def getThetaPhiFromK(self):
+    def get_theta_phi_from_k(self):
         kxy = np.sqrt( self.kx**2 + self.ky**2)
         theta = np.arctan2(kxy, self.kz)
         theta = np.degrees(theta)
         phi = np.degrees(np.arctan2(self.ky,self.kx))
         return [theta,phi]
 
-    def getKFromThetaPhiNNormal(self):
+    def get_k_from_theta_phi_n_normal(self):
         theta = self.theta
         phi = self.phi
         kx = self.knorm*np.cos(np.radians(phi))*np.sin(np.radians(theta))
         ky = self.knorm*np.sin(np.radians(phi))*np.sin(np.radians(theta))
         kz = self.normal_*self.knorm*np.cos(np.radians(theta))
         return [kx,ky,kz]
+
+    def _deprecated_method(self, old_name, new_name, *args):
+        warnings.warn(
+            f"{old_name} is deprecated; use {new_name}",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(self, new_name)(*args)
+
+    def validateData(self):
+        return self._deprecated_method("validateData", "validate_data")
+
+    def completeData(self, combination):
+        return self._deprecated_method("completeData", "complete_data", combination)
+
+    def getNFromK(self):
+        return self._deprecated_method("getNFromK", "get_n_from_k")
+
+    def getNormalFromK(self):
+        return self._deprecated_method("getNormalFromK", "get_normal_from_k")
+
+    def getKZFromKXYNNormal(self):
+        return self._deprecated_method("getKZFromKXYNNormal", "get_kz_from_kxy_n_normal")
+
+    def getThetaPhiFromK(self):
+        return self._deprecated_method("getThetaPhiFromK", "get_theta_phi_from_k")
+
+    def getKFromThetaPhiNNormal(self):
+        return self._deprecated_method(
+            "getKFromThetaPhiNNormal", "get_k_from_theta_phi_n_normal"
+        )
 
     @property
     def knorm(self):
@@ -117,8 +153,6 @@ class KVector(object):
 
     def str(self):
         return "k:{},theta:{},phi:{},normal:{},n:{}".format(self.k,self.theta,self.phi,self.normal,self.n)
-
-from enum import Enum
 
 class KVectorGroupColumns(Enum):
     kx = 0
@@ -160,13 +194,13 @@ class KVectorGroup(object):
                 self.data_[:,col] = item
             col += 1
         if validate:
-            combination = self.validateData()
-            self.completeData(combination)
+            combination = self.validate_data()
+            self.complete_data(combination)
 
     def __repr__(self):
         return "k:{},theta:{},phi:{},normal:{},n:{},weight:{}".format(self.k,self.theta,self.phi,self.normal,self.n,self.weighting)
 
-    def validateData(self):
+    def validate_data(self):
         validColumns = []
         validColumns.append([self.cols.kx,self.cols.ky,self.cols.kz])
         validColumns.append([self.cols.kx,self.cols.ky,
@@ -187,35 +221,35 @@ class KVectorGroup(object):
             raise ValueError("not enough information to uniquely determine plane wave")
         return combination
 
-    def completeData(self,combination):
+    def complete_data(self,combination):
         if combination == 0:
             "all 3 k components are given"
-            self.data_[:,self.cols.n.value] = self.getNFromK()
-            self.data_[:,self.cols.normal.value] = self.getNormalFromK()
-            thetaPhi = self.getThetaPhiFromK()
+            self.data_[:,self.cols.n.value] = self.get_n_from_k()
+            self.data_[:,self.cols.normal.value] = self.get_normal_from_k()
+            thetaPhi = self.get_theta_phi_from_k()
             self.data_[:,self.cols.theta.value] = thetaPhi[0]
             self.data_[:,self.cols.phi.value] = thetaPhi[1]
         if combination == 1:
             "kx,ky plus n and normal"
-            self.data_[:,self.cols.kz.value] = self.getKZFromKXYNNormal()
-            thetaPhi = self.getThetaPhiFromK()
+            self.data_[:,self.cols.kz.value] = self.get_kz_from_kxy_n_normal()
+            thetaPhi = self.get_theta_phi_from_k()
             self.data_[:,self.cols.theta.value] = thetaPhi[0]
             self.data_[:,self.cols.phi.value] = thetaPhi[1]
         if combination == 2:
             "theta,phi plus n and normal"
-            kxyz = self.getKFromThetaPhiNNormal()
+            kxyz = self.get_k_from_theta_phi_n_normal()
             self.data_[:,self.cols.kx.value] = kxyz[0]
             self.data_[:,self.cols.ky.value] = kxyz[1]
             self.data_[:,self.cols.kz.value] = kxyz[2]
 
 
-    def getNFromK(self):
+    def get_n_from_k(self):
         return np.linalg.norm(self.k,axis=1)/self.k0
 
-    def getNormalFromK(self):
+    def get_normal_from_k(self):
         return np.sign(self.kz)
 
-    def getKZFromKXYNNormal(self):
+    def get_kz_from_kxy_n_normal(self):
         radicand = (
             np.power(self.knorm, 2)
             - np.power(self.kx, 2)
@@ -228,14 +262,14 @@ class KVectorGroup(object):
             raise ValueError("kx and ky exceed the magnitude set by n and wavelength")
         return self.normal_ * np.sqrt(np.clip(radicand, a_min=0.0, a_max=None))
 
-    def getThetaPhiFromK(self):
+    def get_theta_phi_from_k(self):
         kxy = np.sqrt( np.power(self.kx,2) + np.power(self.ky,2))
         theta = np.arctan2(kxy, self.kz)
         theta = np.degrees(theta)
         phi = np.degrees(np.arctan2(self.ky,self.kx))
         return [theta,phi]
 
-    def getKFromThetaPhiNNormal(self):
+    def get_k_from_theta_phi_n_normal(self):
         theta = self.theta
         phi = self.phi
         kx = self.knorm*np.cos(np.radians(phi))*np.sin(np.radians(theta))
@@ -291,10 +325,41 @@ class KVectorGroup(object):
         norm[self.normal_ == -1] = "-z"
         return norm
 
+    def _deprecated_method(self, old_name, new_name, *args):
+        warnings.warn(
+            f"{old_name} is deprecated; use {new_name}",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(self, new_name)(*args)
+
+    def validateData(self):
+        return self._deprecated_method("validateData", "validate_data")
+
+    def completeData(self, combination):
+        return self._deprecated_method("completeData", "complete_data", combination)
+
+    def getNFromK(self):
+        return self._deprecated_method("getNFromK", "get_n_from_k")
+
+    def getNormalFromK(self):
+        return self._deprecated_method("getNormalFromK", "get_normal_from_k")
+
+    def getKZFromKXYNNormal(self):
+        return self._deprecated_method("getKZFromKXYNNormal", "get_kz_from_kxy_n_normal")
+
+    def getThetaPhiFromK(self):
+        return self._deprecated_method("getThetaPhiFromK", "get_theta_phi_from_k")
+
+    def getKFromThetaPhiNNormal(self):
+        return self._deprecated_method(
+            "getKFromThetaPhiNNormal", "get_k_from_theta_phi_n_normal"
+        )
+
 
     def sort(self,column,order='ascending'):
         if order == 'ascending':
-            indices = np.argsort( -self.data_[:,self.cols[column].value])
+            indices = np.argsort(self.data_[:,self.cols[column].value])
         elif order == 'descending':
             indices = np.argsort( -self.data_[:,self.cols[column].value])
         elif order == 'absolute_ascending':
@@ -390,60 +455,6 @@ class BlochFamily(KVectorGroup):
         return_str += "order1:{},order2:{}".format(self.order1, self.order2)
         return_str += "weight:{},".format(self.weighting)
         return return_str
-
-class SymmetryFamilyColumns(Enum):
-    symmetry = 8
-
-class SymmetryFamily(KVectorGroup):
-    """
-    Extends KVectorGroup to include a symmetry order
-    """
-    def __init__(self, *args, symmetry=None, **kwargs):
-         """Initialize a SymmetryFamily object
-
-         For more information on arguemnts, see KVectorGroup
-
-         Parameters
-         ----------
-         symmetry: (N,)<np.int64>np.array
-            the symmetry
-         """
-         super(SymmetryFamily, self).__init__(*args, **kwargs)
-
-         extended_data = np.empty((self.n_rows, 9), dtype=np.float64)
-         extended_data.fill(float('nan'))
-         extended_data[:,:SymmetryFamilyColumns.order1.value] = self.data_
-         self.data_ = extended_data
-         if symmetry is not None:
-             self.data_[:, SymmetryFamilyColumns.symmetry.value] = symmetry
-
-    @classmethod
-    def from_kvector_group(symmetry_family, kvector_group):
-        """Return SymmetryFamily from a KVectorGroup
-
-
-        """
-        return SymmetryFamily(kvector_group.wavelength,
-                           kvector_group.n_rows,
-                           data = kvector_group.data_,
-                           validate=False)
-
-    def set_symmetry(self, symmetry):
-        self.data_[:, SymmetryFamilyColumns.symmetry.value] = symmetry
-
-    @property
-    def symmetry(self):
-        return self.data_[:, SymmetryFamilyColumns.symmetry.value]
-
-    def __repr__(self):
-        return_str =  "k:{},theta:{},phi:{},".format(self.k,self.theta,self.phi)
-        return_str += "normal:{},n:{},".format(self.normal,self.n)
-        return_str += "symmetry:{}".format(self.symmetry)
-        return_str += "weight:{},".format(self.weighting)        
-        return return_str
-
-    
-    
 
 if __name__ == '__main__':
     pass

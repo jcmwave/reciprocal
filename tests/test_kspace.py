@@ -83,3 +83,9 @@ def test_invalid_sampling_constraints(constraint, message):
     kspace_obj = kspace.KSpace(np.pi, fermi_radius=2.0)
     with pytest.raises(ValueError, match=message):
         kspace_obj.regular_sampler.sample(constraint=constraint)
+
+
+def test_spiral_sampling_is_no_longer_a_current_option():
+    kspace_obj = kspace.KSpace(np.pi, fermi_radius=2.0)
+    with pytest.raises(ValueError, match=r"cartesian\|circular"):
+        kspace_obj.regular_sampler.sample(grid_type="spiral")
