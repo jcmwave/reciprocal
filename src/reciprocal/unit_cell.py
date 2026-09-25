@@ -1,19 +1,15 @@
 import numpy as np
 from reciprocal.bravais import BravaisLattice
 from reciprocal.utils import (lies_on_vertex, lies_on_poly,
-                              name_vertices, lies_on_sym_line, rotation2D, rotation3D,
                               order_lexicographically)
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
 from reciprocal.numerics import DEFAULT_TOLERANCES
-from scipy.spatial.distance import cdist
 
-import shapely.geometry
 from shapely.geometry.point import Point
 from shapely.geometry.polygon import LinearRing, Polygon
 import itertools
 from itertools import tee
 from collections import OrderedDict
-import copy
 def line(p1, p2):
     A = (p1[1] - p2[1])
     B = (p2[0] - p1[0])
@@ -102,7 +98,6 @@ def find_intersections(vertices, n_closest):
         inter = intersection(L1, L2)
         if inter is not False:
             my_intersection = np.array([inter[0], inter[1], 0.])
-            #distance = np.round(np.linalg.norm(my_intersection), 9)#
             distance = np.linalg.norm(my_intersection)
             for ic in range(n_closest):
                 if np.isclose(distance, closest[ic], rtol=1e-6, atol=length_scale*1e-9):
@@ -201,19 +196,10 @@ class UnitCell():
     def __init__(self, lattice, WignerSeitz=True):
         self.wigner_seitz = WignerSeitz
         self.lattice = lattice
-        #self.vertices = vertices
-        #is self.vertices is None:
         self.vertices = self.make_vertices()
-        #if self.wigner_seitz:
         self.special_points = self.make_special_points()
         self.irreducible = self.make_irreducible_polygon()
-        #else:
-        #self.shape = 'general'
-        #    self.vectors = None
-        #    self.vertices = vertices
         self.max_extent = calc_max_extent(self.vertices)
-        ##self.bravais_lattice = None
-        #self.special_points = None
 
     @classmethod
     def from_vertices(unit_cell, vertices):
@@ -250,8 +236,6 @@ class UnitCell():
 
     def area(self):
         """Return the area of the unit cell"""
-        #x = self.vertices[:,0]
-        #y = self.vertices[:,1]
         x = self.lattice.vectors.vec1
         y = self.lattice.vectors.vec2
         area =  np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
@@ -298,7 +282,6 @@ class UnitCell():
         -------
         (N,3)<np.double>np.array
         """
-        #vertices = []
         vec1 = self.vectors.vec1
         vec2 = self.vectors.vec2
         angle = self.vectors.angle
@@ -337,7 +320,6 @@ class UnitCell():
         length2 = self.vectors.length2
         angle = self.vectors.angle
         co_angle = 180. - angle
-        #GM = np.linalg.norm(vec1)*0.5
         if self.lattice.bravais is BravaisLattice.HEXAGON:
             GM = length1*0.5
             special_points[SpecialPoint.K] = np.array([GM/np.cos(np.pi/6.0),0., 0.])
@@ -417,22 +399,6 @@ class UnitCell():
             extended_special_points[special_point] = np.atleast_2d(extended_points)
         return extended_special_points
 
-    # def vertex_special_points(self, extended_special_points):
-    #     vertex_special_points = OrderedDict()
-    #     vertex_points = {BravaisLattice.HEXAGON:[SpecialPoint.K],
-    #                      BravaisLattice.SQUARE:[SpecialPoint.M],
-    #                      BravaisLattice.RECTANGLE:[SpecialPoint.M],
-    #                      BravaisLattice.OBLIQUE:[SpecialPoint.H1, SpecialPoint.H2,
-    #                                              SpecialPoint.H3]}
-
-
-
-    #     for name, point in extended_special_points.items():
-    #         if name in vertex_points[self.lattice.bravais]:
-    #             vertex_special_points[name] = point
-    #     return vertex_special_points
-
-
     def make_irreducible_polygon(self):
         """
         return the vertices of the irreducible Brillouin zone
@@ -476,8 +442,6 @@ class UnitCell():
             return self._sample_no_symmetry(constraint, center)
 
     def _sample_no_symmetry(self, constraint, center):
-        #unit_cell_path = Polygon(self.vertices[:,:2],
-        #                           closed=True).get_path()
         unit_cell_exterior = LinearRing(self.vertices[:, :2])
         n_grid_points = self._npoints_from_constraint(constraint)
         if n_grid_points[0] == 1:
@@ -499,46 +463,17 @@ class UnitCell():
             trans_sym.vector2 = vec2
 
 
-            #range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
-            #range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
-            #range1 = np.linspace(-(n_grid_points[0]-1), n_grid_points[0]-1, n_grid_points[0]*2-1, dtype=np.int64)
-            #range2 = np.linspace(-(n_grid_points[1]-1), n_grid_points[1]-1, n_grid_points[1]*2-1, dtype=np.int64)
-            # range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
-            # range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
             n = np.max(n_grid_points)
             n += int(n/2.)
-            # if n_grid_points[0] == 1:
-            #     range1 = np.arange(0, range_lim1, 1, dtype=np.int64)
-            #     range2 = np.arange(0, range_lim2, 1, dtype=np.int64)
-            # else:
-            #     range1 = np.arange(-range_lim1, range_lim1, 1, dtype=np.int64)
-            #     range2 = np.arange(-range_lim2, range_lim2, 1, dtype=np.int64)
-
-
             points = trans_sym.apply_symmetry_operators(origin, n=n)
         else:
             points = np.atleast_2d(origin)
         points = self.crop_to_bz(points)
 
-        # points = []
-        # for nx in range1:
-        #     for ny in range2:
-        #         trial_point = (nx*vec1 + ny*vec2)
-        #         p = Point(trial_point[:2])
-        #         if shifted:
-        #             trial_point += (0.5*vec1 + 0.5*vec2)
-        #         #if not unit_cell_path.contains_point(trial_point,
-        #         #                                       radius=1e-7):
-        #         if not p.intersects(unit_cell_exterior)
-        #             continue
-        #         points.append(trial_point)
-        # points = np.vstack(points)
         points = order_lexicographically(points)
         weights = self.weight_bz_sampling(points)
-        int_element = self.integration_element(constraint)#/self.area()
+        int_element = self.integration_element(constraint)
         return points, weights, int_element
-
-        #self.sampling = ipoly_samp
 
     def _sample_using_symmetry(self, constraint, center):
         """
@@ -598,14 +533,10 @@ class UnitCell():
             all_points_array[startrow:startrow+points.shape[0], :] = points
             startrow += points.shape[0]
         all_points = all_points_array
-        #unique_points = np.unique(all_points.round(decimals=4), axis=0)
         unique_points = all_points
         points = order_lexicographically(unique_points)
-        #weights = self.weight_bz_sampling(points)
         weights = np.ones(points.shape[0])*int_element
-        #point_array = np.vstack(points)
         return points, weights, int_element
-        #self.sampling = np.array(points)
 
     def _npoints_from_constraint(self, constraint):
         """
@@ -661,10 +592,6 @@ class UnitCell():
                 n_grid_points = [constraint['value'][0], constraint['value'][1]]
             except:
                 n_grid_points = [constraint['value'], constraint['value']]
-            # if n_grid_points[0] == 0:
-            #     n_grid_points[0] = 1
-            # if n_grid_points[1] == 0:
-            #     n_grid_points[1] = 1
             if n_grid_points[0] == 1:
                 max_length1 = self.vectors.length1
             else:
@@ -710,9 +637,7 @@ class UnitCell():
             The symmetry regions with their associated k-space points
 
         """
-        #irreducible_vertices = np.hstack([irreducible_path.vertices, np.zeros((irreducible_path.vertices.shape[0], 1))])
         n_grid_points = self._npoints_from_constraint(constraint)
-        #max_lengths = self._max_lengths_from_constraint(constraint)
         if n_grid_points[0] == 1:
             vec1 = np.array([0.0, 0.0, 0.0])
         else:
@@ -731,22 +656,11 @@ class UnitCell():
 
 
 
-        #range_lim1 = n_grid_points[0]+int(n_grid_points[0]/2.0)
-        #range_lim2 = n_grid_points[1]+int(n_grid_points[1]/2.0)
         n1 = n_grid_points[0]
-        # n1 += int(n1/2.)
 
         n2 = n_grid_points[1]
-        #n2 = 0
-        # n2 += int(n2/2.)
 
-
-        int_element = self.integration_element(constraint)#/self.area()
-
-        # if shifted:
-        #     origin = (1./2.)*vec1 + (1./2.)*vec2
-        # else:
-        #     origin = np.array([0., 0., 0.])
+        int_element = self.integration_element(constraint)
         origin = np.concatenate([center, np.array([0.])])
         points = trans_sym.apply_symmetry_operators(origin, n=((n1, n1), (n2, n2)))
         points = self.crop_to_ibz(points)
@@ -762,9 +676,8 @@ class UnitCell():
 
         bbox = bz.bounds
 
-        #representative_lengths = cdist(points, points)
         representative_lengths = np.array([bbox[2]-bbox[0], bbox[3]-bbox[1]])
-        representative_length = np.min(representative_lengths) ##np.amin(representative_lengths[~np.eye(representative_lengths.shape[0],dtype=bool)])
+        representative_length = np.min(representative_lengths)
         special_points = list(self.special_points.keys())
         special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
         ipoly_samp = {}
@@ -785,13 +698,11 @@ class UnitCell():
                 ipoly_samp[SpecialPoint.AXIS].append(trial_point)
             else:
                 ipoly_samp[SpecialPoint.INTERIOR].append(trial_point)
-            #all_points.append(trial_point)
         for special_point in special_points:
             if len(ipoly_samp[special_point]) > 0:
                 ipoly_samp[special_point] = np.array(ipoly_samp[special_point])
             else:
                 del ipoly_samp[special_point]
-        #all_points = np.vstack(all_points)
         all_points = []
         all_sym_ops = []
         all_weights = []
@@ -817,33 +728,20 @@ class UnitCell():
                 point = ipoly_samp[symmetry][row, :2]
                 all_points.append(point)
                 all_weights.append(total_weight)
-                #remaining_symmetry = self.symmetry()-symm
-                #if symmetry in trans_syms:
                 all_sym_ops.append((symm, self.translational_symmetry()))
-                #else:
-                #    all_sym_ops.append((symm, None))
         all_points = np.vstack(all_points)
         all_weights = np.array(all_weights)
         return all_points, all_weights, all_sym_ops
-        #self.sampling = ipoly_samp
 
     def weight_sym_ops(self, sym_ops):
         weighting = np.zeros(len(sym_ops))
-        #max_sym = self.symmetry()
         for ii, sym in enumerate(sym_ops):
-            #weight = sym.get_n_symmetry_ops()/max_sym
             remaining_sym = self.symmetry()-sym
-            #if np.isinf(weight):
-            #    weight = 1.0/(max_sym*2)
             weighting[ii] = (remaining_sym.get_n_symmetry_ops()/self.symmetry().get_n_symmetry_ops())
-        #weighting/np.sum(weighting)
         return weighting
 
     def weight_bz_sampling(self, points):
-        #symmetry_regions = self.symmetry_regions()
-        #t_syms = self.translational_symmetries()
         ext_sp_points = self.extend_special_points()
-        #vertex_points = self.vertex_special_points(ext_sp_points)
         weights = np.zeros(points.shape[0])
         for row in range(points.shape[0]):
             trial_point = points[row, :]
@@ -858,7 +756,6 @@ class UnitCell():
                 weights[row] = 1./n_sym_ops
             else:
                 weights[row] = 1.0
-        #weights /= weights.size
         return weights
 
     def weight_irreducible_sampling(self, ipoly_sample):
@@ -926,34 +823,6 @@ class UnitCell():
             mapping of special point to point symmetry
         """
         symmetries = {}
-
-        # symmetries[SpecialPoint.GAMMA] = {BravaisLattice.HEXAGON:PointSymmetry.C1,
-        #                                   BravaisLattice.SQUARE:PointSymmetry.C1,
-        #                                   BravaisLattice.RECTANGLE:PointSymmetry.C1,
-        #                                   BravaisLattice.OBLIQUE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.K] = {BravaisLattice.HEXAGON:PointSymmetry.C2}
-        # symmetries[SpecialPoint.M]  = {BravaisLattice.HEXAGON:PointSymmetry.C3,
-        #                                BravaisLattice.SQUARE:PointSymmetry.C1,
-        #                                BravaisLattice.RECTANGLE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.X] = {BravaisLattice.SQUARE:PointSymmetry.SIGMA_D,
-        #                               BravaisLattice.RECTANGLE:PointSymmetry.C1,
-        #                               BravaisLattice.OBLIQUE:PointSymmetry.C2}
-        # symmetries[SpecialPoint.Y] = {BravaisLattice.RECTANGLE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.Y1] = {BravaisLattice.OBLIQUE: PointSymmetry.C1}
-        # symmetries[SpecialPoint.Y2] = {BravaisLattice.OBLIQUE: PointSymmetry.C1}
-        # symmetries[SpecialPoint.H1] = {BravaisLattice.OBLIQUE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.H2] = {BravaisLattice.OBLIQUE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.H3] = {BravaisLattice.OBLIQUE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.C] = {BravaisLattice.OBLIQUE:PointSymmetry.C1}
-
-        # symmetries[SpecialPoint.AXIS] = {BravaisLattice.HEXAGON:PointSymmetry.C6,
-        #                                  BravaisLattice.SQUARE:PointSymmetry.C4,
-        #                                  BravaisLattice.RECTANGLE:PointSymmetry.C2,
-        #                                  BravaisLattice.OBLIQUE:PointSymmetry.C1}
-        # symmetries[SpecialPoint.INTERIOR] = {BravaisLattice.HEXAGON:PointSymmetry.D6,
-        #                                      BravaisLattice.SQUARE:PointSymmetry.D4,
-        #                                      BravaisLattice.RECTANGLE:PointSymmetry.D2,
-        #                                      BravaisLattice.OBLIQUE:PointSymmetry.C2}
         sigma_h = symmetry_from_type(PointSymmetry.SIGMA_H)
         c1 = symmetry_from_type(PointSymmetry.C1)
         c2 = symmetry_from_type(PointSymmetry.C2)
@@ -1017,45 +886,3 @@ class UnitCell():
         trans1.vector1 = self.lattice.vectors.vec1
         trans1.vector2 = self.lattice.vectors.vec2
         return trans1
-
-        symmetries = {}
-        # symmetries[SpecialPoint.K] = {BravaisLattice.HEXAGON:trans1}
-        #
-        # symmetries[SpecialPoint.M]  = {BravaisLattice.HEXAGON:trans1,
-        #                                BravaisLattice.SQUARE:trans1,
-        #                                BravaisLattice.RECTANGLE:trans1}
-        #
-        # symmetries[SpecialPoint.X] = {BravaisLattice.SQUARE:trans1,
-        #                               BravaisLattice.RECTANGLE:trans1,
-        #                               BravaisLattice.OBLIQUE:trans1}
-        #
-        # symmetries[SpecialPoint.Y] = {BravaisLattice.RECTANGLE:trans1}
-        #
-        # symmetries[SpecialPoint.Y1] = {BravaisLattice.OBLIQUE:trans1}
-        # #symmetries[SpecialPoint.Y2] = {BravaisLattice.OBLIQUE: PointSymmetry.C1}
-        # symmetries[SpecialPoint.H1] = {BravaisLattice.OBLIQUE:trans1}
-        # symmetries[SpecialPoint.H2] = {BravaisLattice.OBLIQUE:trans1}
-        # symmetries[SpecialPoint.H3] = {BravaisLattice.OBLIQUE:trans1}
-        # symmetries[SpecialPoint.C] = {BravaisLattice.OBLIQUE:trans1}
-
-        # symmetries[SpecialPoint.EXTERIOR] = {BravaisLattice.HEXAGON:trans1,
-        #                                      BravaisLattice.SQUARE:trans1,
-        #                                      BravaisLattice.RECTANGLE:trans1,
-        #                                      BravaisLattice.OBLIQUE:trans1}
-
-
-
-        trans_symmetries = {}
-        for name, point in self.special_points.items():
-            trans_points = trans1.apply_symmetry_operators(point)
-            trans_points = self.crop_to_bz(trans_points)
-            trans_symmetries[name] = trans_points.shape[0]
-
-        #special_points = list(self.special_points.keys())
-        #special_points += [SpecialPoint.EXTERIOR]
-        # for s_point in symmetries.keys():
-        #     if self.lattice.bravais not in symmetries[s_point]:
-        #         continue
-        #     tra= symmetries[s_point][self.lattice.bravais]
-        #     trans_symmetries[s_point] = symmetries[s_point][self.lattice.bravais]
-        return trans_symmetries
