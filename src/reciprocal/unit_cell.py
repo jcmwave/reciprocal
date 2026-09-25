@@ -7,154 +7,65 @@ from reciprocal.numerics import DEFAULT_TOLERANCES
 
 from shapely.geometry.point import Point
 from shapely.geometry.polygon import LinearRing, Polygon
-import itertools
-from itertools import tee
 from collections import OrderedDict
-def line(p1, p2):
-    A = (p1[1] - p2[1])
-    B = (p2[0] - p1[0])
-    C = (p1[0]*p2[1] - p2[0]*p1[1])
-    return A, B, -C
-
-def intersection(L1, L2):
-    D  = L1[0] * L2[1] - L1[1] * L2[0]
-    Dx = L1[2] * L2[1] - L1[1] * L2[2]
-    Dy = L1[0] * L2[2] - L1[2] * L2[0]
-    if D != 0:
-        x = Dx / D
-        y = Dy / D
-        return x,y
-    else:
-        return False
 
 
-def pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
+def _gauss_reduce_basis(vector1, vector2):
+    """Return a two-dimensional Gauss-reduced basis for the same lattice."""
+    first = np.asarray(vector1, dtype=float)[:2].copy()
+    second = np.asarray(vector2, dtype=float)[:2].copy()
+
+    for _ in range(128):
+        if np.dot(second, second) < np.dot(first, first):
+            first, second = second, first
+        coefficient = int(np.rint(np.dot(first, second) / np.dot(first, first)))
+        if coefficient == 0:
+            return first, second
+        second = second - coefficient * first
+    raise RuntimeError("could not reduce lattice basis")
 
 
+def _clip_polygon_to_half_plane(vertices, normal, offset, tolerance):
+    """Clip a convex polygon to ``x dot normal <= offset``."""
+    clipped = []
+    for index, start in enumerate(vertices):
+        end = vertices[(index + 1) % len(vertices)]
+        start_distance = np.dot(start, normal) - offset
+        end_distance = np.dot(end, normal) - offset
+        start_inside = start_distance <= tolerance
+        end_inside = end_distance <= tolerance
 
-def make_perpendicular_lines(vec1, vec2):
-    """
-    return vertices of lines perpendicular to combinations of two vectors.
+        if start_inside != end_inside:
+            direction = end - start
+            denominator = np.dot(direction, normal)
+            fraction = (offset - np.dot(start, normal)) / denominator
+            clipped.append(start + fraction * direction)
+        if end_inside:
+            clipped.append(end)
 
-    Iterate over combinations of the two vectors. Perpendicular lines intersect
-    the mid point of the vectors. The lines are ten times longer than the
-    distance to the mid point (to ensure all nearby intersections of the lines
-    can be found).
-
-    Parameters
-    ----------
-    vec1 (3,) <np.double>np.array
-        the first lattice vector
-    vec2 (3,) <np.double>np.array
-        the second lattice vector
-
-    Returns
-    -------
-    list of (2,) tuple containing (float, (2,3) <np.double>np.array)
-        the distance to the midpoint and vertices of the perpendicular line
-    """
-    # Create lines perpendicular to vectors pointing to closest lattice cites
-    vertices = []
-    for i_first in range(-1, 2):
-        for i_second in range(-1, 2):
-            if i_first == 0 and i_second == 0:
-                continue
-
-            vertex = i_first*vec1*0.5 + i_second*vec2*0.5
-            distance = np.linalg.norm(vertex)
-            perpendicular = np.cross(vertex, np.array([0., 0., 1.]))*10
-            my_line = np.squeeze(np.array([[vertex+perpendicular],[vertex-perpendicular]]))
-            vertices.append((distance, my_line))
-    return vertices
-
-def find_intersections(vertices, n_closest):
-    """
-    find intersections of lines defined through their vertices
-
-    the parameter n_closest determines how many intersections to return. Only
-    the intersections closest to the origin are returned.
-
-    Parameters
-    ----------
-    vertices: list of (2,) tuple containing (float, (2,2) <np.double>np.array)
-        vertices of the lines to calculated intersections for
-    n_closest: int in range (1, 2)
-
-    Return
-    ------
-    list of (2,) tuple containing (float, (2,2) <np.double>np.array)
-        the intersection points between the lines
-    """
-    closest = np.full(n_closest, np.inf)
-    length_scale = vertices[0][0]
-    intersections = []
-    for vertex1, vertex2 in itertools.combinations(vertices, 2):
-        L1 = line(vertex1[1][0, :], vertex1[1][1, :])
-        L2 = line(vertex2[1][0, :], vertex2[1][1, :])
-        inter = intersection(L1, L2)
-        if inter is not False:
-            my_intersection = np.array([inter[0], inter[1], 0.])
-            distance = np.linalg.norm(my_intersection)
-            for ic in range(n_closest):
-                if np.isclose(distance, closest[ic], rtol=1e-6, atol=length_scale*1e-9):
-                    break
-                if distance -closest[ic]< -1*length_scale*1e-6:
-                    closest[ic] = distance
-                    break
-            if np.all(distance -closest > length_scale*1e-6):
-                continue
-            valid = True
-            for i_inter in range(len(intersections)):
-                if (np.isclose(my_intersection[0], intersections[i_inter][1][0],
-                               rtol=1e-6, atol=length_scale*1e-9) and
-                    np.isclose(my_intersection[1], intersections[i_inter][1][1],
-                               rtol=1e-6, atol=length_scale*1e-9)):
-                        valid = False
-                        break
-            if not valid:
-                continue
-            intersections.append([distance, my_intersection])
+    if not clipped:
+        raise RuntimeError("lattice half-planes produced an empty Wigner-Seitz cell")
+    return np.asarray(clipped)
 
 
+def _remove_duplicate_vertices(vertices, tolerance):
+    """Remove adjacent numerical duplicates from a closed polygon."""
+    unique = [vertices[0]]
+    for vertex in vertices[1:]:
+        if np.linalg.norm(vertex - unique[-1]) > tolerance:
+            unique.append(vertex)
+    if len(unique) > 1 and np.linalg.norm(unique[0] - unique[-1]) <= tolerance:
+        unique.pop()
+    return np.asarray(unique)
 
 
-    return intersections, closest
-
-def split_intersections(intersections, closest):
-    """
-    split intersections into a set of closest points and all other points
-
-    the parameter closest determines how many intersections to return. Only
-    intersection points which are less than or equal to the distances in
-    closest are returned.
-
-    Parameters
-    ----------
-    intersections: list of (2,) tuple containing (float, (2,2) <np.double>np.array)
-        distance and intersection position
-    closest: (2,) or (1,) list
-        unique distances to the closest points
-
-    Return
-    ------
-    (N,2) <np.double>np.array
-        the intersection points
-    """
-    final_intersections = []
-    keep_intersections = []
-    length_scale = intersections[0][0]
-    for i_inter, inter in enumerate(intersections):
-        distance = inter[0]
-        if np.any(distance -closest> length_scale*1e-9):
-            keep_intersections.append(inter)
-            continue
-        final_intersections.append(inter[1])
-
-    return np.array(final_intersections)
+def _rotate_polygon_start(vertices, start):
+    """Choose a deterministic first vertex without changing polygon adjacency."""
+    angles = np.angle(
+        (vertices[:, 0] + 1j * vertices[:, 1])
+        * np.exp(1j * (np.pi + 1e-3 + start))
+    )
+    return np.roll(vertices, -int(np.argmin(angles)), axis=0)
 
 def calc_max_extent(vertices):
     max_extent = 0.0
@@ -275,31 +186,61 @@ class UnitCell():
         return vertices
 
     def _make_wigner_seitz_cell(self):
-        """
-        Return the vertices of the Wigner Seitz cell.
+        """Return the vertices of the Wigner-Seitz cell.
+
+        Every nonzero lattice translation ``R`` defines the half-plane
+        ``x dot R <= |R|**2 / 2``. In two dimensions, Gauss reduction limits
+        the Voronoi-relevant translations to the reduced basis vectors, their
+        shortest sum or difference, and the negatives of those three vectors.
 
         Returns
         -------
         (N,3)<np.double>np.array
         """
-        vec1 = self.vectors.vec1
-        vec2 = self.vectors.vec2
-        angle = self.vectors.angle
-        vertices = make_perpendicular_lines(vec1, vec2)
-        if np.isclose(
-            self.vectors.length1,
-            self.vectors.length2,
-            rtol=DEFAULT_TOLERANCES.relative,
-            atol=DEFAULT_TOLERANCES.absolute,
-        ):
-            n_closest = 1
+        original_vector1 = np.asarray(self.vectors.vec1, dtype=float)
+        original_vector2 = np.asarray(self.vectors.vec2, dtype=float)
+        vector1, vector2 = _gauss_reduce_basis(original_vector1, original_vector2)
+
+        normals = np.vstack([vector1, vector2])
+        offsets = 0.5 * np.sum(normals**2, axis=1)
+        vertices = []
+        for first_sign in (-1.0, 1.0):
+            for second_sign in (-1.0, 1.0):
+                vertices.append(
+                    np.linalg.solve(
+                        normals,
+                        np.array([first_sign * offsets[0], second_sign * offsets[1]]),
+                    )
+                )
+        vertices = np.asarray(vertices)
+        angles = np.arctan2(vertices[:, 1], vertices[:, 0])
+        vertices = vertices[np.argsort(angles)]
+
+        if np.dot(vector1, vector2) >= 0.0:
+            third_vector = vector2 - vector1
         else:
-            n_closest = 2
-        intersections, closest = find_intersections(vertices, n_closest)
-        intersections = split_intersections(intersections, closest)
-        angle_b1 = np.angle(vec1[0]+1j*vec1[1])
-        intersections = order_lexicographically(intersections, start=-angle_b1)
-        return intersections
+            third_vector = vector2 + vector1
+        translations = np.vstack(
+            [vector1, -vector1, vector2, -vector2, third_vector, -third_vector]
+        )
+        squared_lengths = np.sum(translations**2, axis=1)
+        translations = translations[np.argsort(squared_lengths, kind="stable")]
+
+        for translation in translations:
+            squared_length = np.dot(translation, translation)
+            vertices = _clip_polygon_to_half_plane(
+                vertices,
+                translation,
+                0.5 * squared_length,
+                DEFAULT_TOLERANCES.relative * squared_length,
+            )
+
+        maximum_radius = np.max(np.linalg.norm(vertices, axis=1))
+        vertex_tolerance = np.finfo(float).eps * maximum_radius * 128.0
+        vertices = _remove_duplicate_vertices(vertices, vertex_tolerance)
+        vertices = np.column_stack([vertices, np.zeros(len(vertices))])
+        angle_b1 = np.angle(original_vector1[0] + 1j * original_vector1[1])
+        return _rotate_polygon_start(vertices, start=-angle_b1)
 
     def make_special_points(self):
         """

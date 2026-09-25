@@ -94,3 +94,39 @@ def test_lattice_from_keywords():
     lat_vec_args['length2'] = 1000.
     lat_vec_args['angle'] = 60.    
     lat = lattice.Lattice.from_lat_vec_args(**lat_vec_args)
+
+
+@pytest.mark.parametrize(
+    "vector1,vector2,expected_vertices",
+    [
+        ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 4),
+        ([1.0, 0.0, 0.0], [0.5, np.sqrt(3.0) / 2.0, 0.0], 6),
+        ([1.0, 0.0, 0.0], [0.95, 0.2, 0.0], 6),
+    ],
+)
+def test_wigner_seitz_cell_uses_lattice_half_planes(
+    vector1, vector2, expected_vertices
+):
+    vectors = lattice.LatticeVectors(vector1, vector2)
+    reciprocal_lattice = lattice.Lattice(vectors, lattice_type="reciprocal")
+    vertices = reciprocal_lattice.brillouin_zone.vertices
+
+    assert vertices.shape == (expected_vertices, 3)
+    np.testing.assert_allclose(vertices[:, 2], 0.0)
+
+    x = vertices[:, 0]
+    y = vertices[:, 1]
+    polygon_area = 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
+    lattice_area = abs(np.cross(np.asarray(vector1), np.asarray(vector2))[2])
+    assert polygon_area == pytest.approx(lattice_area, rel=1e-11)
+
+    for first_order in range(-8, 9):
+        for second_order in range(-8, 9):
+            if first_order == 0 and second_order == 0:
+                continue
+            translation = (
+                first_order * np.asarray(vector1[:2])
+                + second_order * np.asarray(vector2[:2])
+            )
+            offset = 0.5 * np.dot(translation, translation)
+            assert np.all(vertices[:, :2] @ translation <= offset + 1e-10)
