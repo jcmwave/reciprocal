@@ -8,6 +8,7 @@ import numpy as np
 
 from reciprocal import KSpace
 from reciprocal.canvas import Canvas
+from reciprocal.spectrum import CartesianGrid
 
 
 def main() -> None:
@@ -15,18 +16,13 @@ def main() -> None:
     parser.add_argument("output", type=Path, help="PNG file to create")
     args = parser.parse_args()
 
-    space = KSpace(np.pi, symmetry="D4", fermi_radius=2.0)
-    points, _weights = space.regular_sampler.sample(
-        grid_type="cartesian",
-        constraint={"type": "n_points", "value": 81},
-        restrict_to_sym_cone=True,
-    )
+    space = KSpace.propagating(np.pi, refractive_index=1.0)
+    sampling = space.sample_pupil(CartesianGrid((41, 41)))
 
     fig, ax = plt.subplots(figsize=(5, 5), layout="constrained")
     canvas = Canvas(ax)
-    canvas.plot_fermi_circle(space)
-    canvas.plot_symmetry_cone(space)
-    canvas.plot_point_sampling(points, color="tab:blue")
+    canvas.plot_spectrum(space)
+    canvas.plot_point_sampling_weighted(sampling, cmap="viridis")
     ax.set(xlabel=r"$k_x$", ylabel=r"$k_y$", title="Reciprocal-space sampling")
     fig.savefig(args.output, dpi=150)
     plt.close(fig)

@@ -4,6 +4,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 FloatArray = NDArray[np.float64]
+ComplexArray = NDArray[np.complex128]
 
 class KVector:
     wavelength: float
@@ -13,9 +14,53 @@ class KVector:
     phi: float
     kx: float
     ky: float
-    kz: float
+    kz: float | complex
     weighting: float | None
-    def __init__(self, wavelength: float, n: float | None = ..., theta: float | None = ..., phi: float | None = ..., normal: float | None = ..., kx: float | None = ..., ky: float | None = ..., kz: float | None = ..., weighting: float | None = ..., validate: bool = ...) -> None: ...
+    def __init__(
+        self,
+        wavelength: float,
+        n: float | None = ...,
+        theta: float | None = ...,
+        phi: float | None = ...,
+        normal: float | None = ...,
+        kx: float | None = ...,
+        ky: float | None = ...,
+        kz: float | None = ...,
+        weighting: float | None = ...,
+        validate: bool = ...,
+    ) -> None: ...
+    @classmethod
+    def from_cartesian(
+        cls,
+        wavelength: float,
+        kx: float,
+        ky: float,
+        kz: float | complex,
+        *,
+        weighting: float | None = ...,
+    ) -> KVector: ...
+    @classmethod
+    def from_angles(
+        cls,
+        wavelength: float,
+        n: float,
+        theta: float,
+        phi: float,
+        normal: float,
+        *,
+        weighting: float | None = ...,
+    ) -> KVector: ...
+    @classmethod
+    def from_transverse(
+        cls,
+        wavelength: float,
+        n: float,
+        kx: float,
+        ky: float,
+        normal: float,
+        *,
+        weighting: float | None = ...,
+    ) -> KVector: ...
     def validate_data(self) -> int: ...
     def complete_data(self, combination: int) -> None: ...
     def get_n_from_k(self) -> float: ...
@@ -35,6 +80,8 @@ class KVector:
     @property
     def k(self) -> FloatArray: ...
     @property
+    def is_evanescent(self) -> bool: ...
+    @property
     def normal(self) -> Literal["+z", "-z"]: ...
 
 class KVectorGroup:
@@ -42,7 +89,47 @@ class KVectorGroup:
     k0: float
     n_rows: int
     data_: FloatArray
-    def __init__(self, wavelength: float, n_rows: int, n: ArrayLike | None = ..., theta: ArrayLike | None = ..., phi: ArrayLike | None = ..., normal: ArrayLike | None = ..., kx: ArrayLike | None = ..., ky: ArrayLike | None = ..., kz: ArrayLike | None = ..., validate: bool = ..., data: ArrayLike | None = ..., weighting: ArrayLike | None = ...) -> None: ...
+    def __init__(
+        self,
+        wavelength: float,
+        n_rows: int,
+        n: ArrayLike | None = ...,
+        theta: ArrayLike | None = ...,
+        phi: ArrayLike | None = ...,
+        normal: ArrayLike | None = ...,
+        kx: ArrayLike | None = ...,
+        ky: ArrayLike | None = ...,
+        kz: ArrayLike | None = ...,
+        validate: bool = ...,
+        data: ArrayLike | None = ...,
+        weighting: ArrayLike | None = ...,
+    ) -> None: ...
+    @classmethod
+    def from_cartesian(
+        cls, wavelength: float, k: ArrayLike, *, weighting: ArrayLike | None = ...
+    ) -> KVectorGroup: ...
+    @classmethod
+    def from_angles(
+        cls,
+        wavelength: float,
+        n: ArrayLike,
+        theta: ArrayLike,
+        phi: ArrayLike,
+        normal: ArrayLike,
+        *,
+        weighting: ArrayLike | None = ...,
+    ) -> KVectorGroup: ...
+    @classmethod
+    def from_transverse(
+        cls,
+        wavelength: float,
+        n: ArrayLike,
+        kx: ArrayLike,
+        ky: ArrayLike,
+        normal: ArrayLike,
+        *,
+        weighting: ArrayLike | None = ...,
+    ) -> KVectorGroup: ...
     def validate_data(self) -> int: ...
     def complete_data(self, combination: int) -> None: ...
     def get_n_from_k(self) -> FloatArray: ...
@@ -79,12 +166,27 @@ class KVectorGroup:
     def n(self) -> FloatArray: ...
     @property
     def weighting(self) -> FloatArray: ...
+    @property
+    def is_evanescent(self) -> NDArray[np.bool_]: ...
     def sort(self, column: str, order: str = ...) -> None: ...
     def slice(self, row: int) -> KVector: ...
     def __add__(self, other: KVectorGroup) -> KVectorGroup: ...
 
 class BlochFamily(KVectorGroup):
+    representative: FloatArray | None
+    reciprocal_basis: FloatArray | None
+    @property
+    def orders(self) -> NDArray[np.int64] | FloatArray: ...
     @property
     def order1(self) -> FloatArray: ...
     @property
     def order2(self) -> FloatArray: ...
+
+class BlochVector(KVector):
+    order: tuple[int, int]
+    representative: FloatArray | None
+    reciprocal_basis: FloatArray | None
+    @property
+    def order1(self) -> int: ...
+    @property
+    def order2(self) -> int: ...

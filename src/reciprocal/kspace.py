@@ -5,8 +5,9 @@ import warnings
 import numpy as np
 import scipy.optimize
 import scipy.spatial
-from shapely.geometry.polygon import Polygon
 
+from reciprocal.cells.geometry import intersect_convex_polygons
+from reciprocal.cells.model import PolygonDomain
 from reciprocal.kvector import BlochFamily, KVectorGroup
 from reciprocal.numerics import contains_close_point
 from reciprocal.symmetry import PointSymmetry, SpecialPoint, Symmetry, symmetry_from_type
@@ -87,7 +88,15 @@ class KSpace():
         subsystem to create k-space samplings based on periodic structures
     """
 
-    def __init__(self, wavelength, symmetry=None, fermi_radius=None):
+    def __init__(
+        self,
+        wavelength,
+        symmetry=None,
+        fermi_radius=None,
+        *,
+        refractive_index=None,
+        spectrum_domain=None,
+    ):
         #self.bzone = brillouinZone
         if not np.isfinite(wavelength) or wavelength <= 0:
             raise ValueError("wavelength must be a finite positive number")
@@ -95,9 +104,38 @@ class KSpace():
             not np.isfinite(fermi_radius) or fermi_radius <= 0
         ):
             raise ValueError("fermi_radius must be a finite positive number")
+        if refractive_index is not None and (
+            not np.isfinite(refractive_index) or refractive_index <= 0
+        ):
+            raise ValueError("refractive_index must be a finite positive number")
         self.wavelength = wavelength
         self.k0 = np.pi*2/wavelength
+        if refractive_index is not None and fermi_radius is not None:
+            expected_radius = refractive_index * self.k0
+            if not np.isclose(fermi_radius, expected_radius, rtol=1e-10, atol=0.0):
+                raise ValueError("fermi_radius must equal refractive_index * k0")
+        if refractive_index is None and fermi_radius is not None:
+            refractive_index = fermi_radius / self.k0
+        self.refractive_index = refractive_index
         self.fermi_radius = fermi_radius
+        if spectrum_domain is not None:
+            from reciprocal.spectrum.domains import KDomain
+
+            if not isinstance(spectrum_domain, KDomain):
+                raise TypeError("spectrum_domain must implement KDomain")
+            if fermi_radius is not None:
+                raise ValueError("specify either spectrum_domain or fermi_radius, not both")
+            self.spectrum_domain = spectrum_domain
+            bounds = spectrum_domain.bounds()
+            self.fermi_radius = max(
+                abs(bounds[0]), abs(bounds[1]), abs(bounds[2]), abs(bounds[3])
+            )
+        elif fermi_radius is not None:
+            from reciprocal.spectrum import PropagationDisk
+
+            self.spectrum_domain = PropagationDisk(fermi_radius)
+        else:
+            self.spectrum_domain = None
         self.symmetry_cone = None
         self.sample_sets = []
         self.periodic_sampler = None
@@ -107,6 +145,106 @@ class KSpace():
             self.calc_symmetry_cone()
         else:
             self.symmetry = None
+
+    @classmethod
+    def propagating(cls, wavelength, refractive_index=1.0, *, symmetry=None):
+        """Construct a k-space facade for the complete propagating spectrum."""
+        if not np.isfinite(wavelength) or wavelength <= 0.0:
+            raise ValueError("wavelength must be a finite positive number")
+        if not np.isfinite(refractive_index) or refractive_index <= 0.0:
+            raise ValueError("refractive_index must be a finite positive number")
+        radius = refractive_index * (2.0 * np.pi / wavelength)
+        return cls(
+            wavelength,
+            symmetry=symmetry,
+            fermi_radius=radius,
+            refractive_index=refractive_index,
+        )
+
+    @classmethod
+    def extended(
+        cls,
+        wavelength,
+        refractive_index,
+        max_parallel_wavevector,
+        *,
+        symmetry=None,
+    ):
+        """Construct a finite propagating-plus-evanescent spectrum."""
+        from reciprocal.spectrum import EvanescentDisk
+
+        if not np.isfinite(wavelength) or wavelength <= 0.0:
+            raise ValueError("wavelength must be a finite positive number")
+        if not np.isfinite(refractive_index) or refractive_index <= 0.0:
+            raise ValueError("refractive_index must be a finite positive number")
+        k0 = 2.0 * np.pi / wavelength
+        domain = EvanescentDisk(refractive_index * k0, max_parallel_wavevector)
+        return cls(
+            wavelength,
+            symmetry=symmetry,
+            refractive_index=refractive_index,
+            spectrum_domain=domain,
+        )
+
+    @property
+    def propagating_radius(self):
+        if self.refractive_index is None:
+            return self.fermi_radius
+        return self.refractive_index * self.k0
+
+    @property
+    def transverse_cutoff(self):
+        if self.spectrum_domain is None:
+            return None
+        bounds = self.spectrum_domain.bounds()
+        return max(abs(bounds[0]), abs(bounds[1]), abs(bounds[2]), abs(bounds[3]))
+
+    @property
+    def wavevector_magnitude(self):
+        return None if self.refractive_index is None else self.refractive_index * self.k0
+
+    def sample_domain(self, grid, *, domain=None, direction=1):
+        """Sample a physical spectrum without imposing periodicity."""
+        from reciprocal.spectrum import KDomain, NonPeriodicSampler
+
+        selected = self.spectrum_domain if domain is None else domain
+        if not isinstance(selected, KDomain):
+            raise ValueError("a bounded spectrum domain is required")
+        sampling = NonPeriodicSampler().sample(selected, grid)
+        magnitude = self.wavevector_magnitude
+        return sampling if magnitude is None else sampling.with_kz(magnitude, direction)
+
+    def sample_pupil(
+        self,
+        grid,
+        *,
+        numerical_aperture=None,
+        domain=None,
+        direction=1,
+    ):
+        """Sample a non-periodic microscopy pupil or configured spectrum."""
+        from reciprocal.spectrum import PupilDomain
+
+        if domain is not None and numerical_aperture is not None:
+            raise ValueError("specify either domain or numerical_aperture, not both")
+        if numerical_aperture is not None:
+            if not np.isfinite(numerical_aperture) or numerical_aperture <= 0.0:
+                raise ValueError("numerical_aperture must be finite and positive")
+            if (
+                self.refractive_index is not None
+                and numerical_aperture > self.refractive_index
+            ):
+                raise ValueError(
+                    "numerical_aperture cannot exceed the configured refractive_index"
+                )
+            domain = PupilDomain(self.k0 * numerical_aperture)
+        return self.sample_domain(grid, domain=domain, direction=direction)
+
+    def with_periodic_structure(self, direct_lattice):
+        """Pair this physical spectrum with a direct-space lattice."""
+        from reciprocal.spectrum import PeriodicKSpace
+
+        return PeriodicKSpace(self, direct_lattice)
 
     def set_symmetry(self, symmetry):
         """
@@ -154,9 +292,11 @@ class KSpace():
 
         counter = 0
         symmetry_groups = []
+        refractive_index_groups = []
 
         for i in range(self.symmetry.get_n_symmetry_ops()):
             symmetry_groups.append([])
+            refractive_index_groups.append([])
 
         for row in range(n_points):
             k = kv_group.k[row,:]
@@ -177,10 +317,13 @@ class KSpace():
             for sym_row in range(points.shape[0]):
                 point = points[sym_row, :]
                 symmetry_groups[sym_row].append(point)
+                refractive_index_groups[sym_row].append(kv_group.n[row])
         for i_sym, point_list in enumerate(symmetry_groups):
             point_array = np.vstack(point_list)[:, :2]
             #point_array = order_lexicographically(point_array)
-            kvs = self.convert_to_KVectors(point_array, 1.0, 1)
+            kvs = self.convert_to_kvectors(
+                point_array, np.asarray(refractive_index_groups[i_sym]), 1
+            )
             symmetry_groups[i_sym] = kvs
         return symmetry_groups
 
@@ -196,10 +339,12 @@ class KSpace():
         counter = 0
         symmetry_groups = []
         weight_groups = []
+        refractive_index_groups = []
 
         for i in range(self.symmetry.get_n_symmetry_ops()):
             symmetry_groups.append([])
             weight_groups.append([])
+            refractive_index_groups.append([])
         for row in range(n_points):
             k = kv_group.k[row,:]
             weight = weighting[row]
@@ -221,25 +366,43 @@ class KSpace():
                 point = points[sym_row, :]
                 symmetry_groups[sym_row].append(point)
                 weight_groups[sym_row].append(weight)
+                refractive_index_groups[sym_row].append(kv_group.n[row])
         for i_sym, point_list in enumerate(symmetry_groups):
             point_array = np.vstack(point_list)
             weight_array = np.vstack(weight_groups[i_sym])
             #point_array = order_lexicographically(point_array)
-            kvs = self.convert_to_KVectors(point_array, 1.0, 1)
+            kvs = self.convert_to_kvectors(
+                point_array, np.asarray(refractive_index_groups[i_sym]), 1
+            )
             symmetry_groups[i_sym] = kvs
             weight_groups[i_sym] = weight_array
         return symmetry_groups, weight_groups
 
-    def convert_to_KVectors(self, points, n, direction):
+    def convert_to_kvectors(self, points, n=None, direction=1):
         """
         convert a (N,2) np.array of kx,ky values into a KVectorGroup object.
         """
+        points = np.asarray(points)
+        if points.ndim != 2 or points.shape[1] not in (2, 3):
+            raise ValueError("points must have shape (N, 2) or (N, 3)")
         nRows = points.shape[0]
-        n = self.fermi_radius/self.k0
+        if n is None:
+            if self.fermi_radius is None:
+                raise ValueError("n is required when fermi_radius is not set")
+            n = self.fermi_radius/self.k0
         return KVectorGroup(self.wavelength, nRows,
                             kx=points[:,0],
                             ky=points[:,1],
                             n=n, normal=direction)
+
+    def convert_to_KVectors(self, points, n=None, direction=1):
+        """Deprecated alias for :meth:`convert_to_kvectors`."""
+        warnings.warn(
+            "convert_to_KVectors is deprecated; use convert_to_kvectors",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.convert_to_kvectors(points, n=n, direction=direction)
 
     def apply_lattice(self, lattice):
         """
@@ -525,7 +688,7 @@ class RegularSampler(Sampler):
         all_point_array = np.vstack(all_points)
         all_point_array, sort_indices = order_lexicographically(all_point_array,
                                                        return_sort_indices=True)
-        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+        all_kvs = self.kspace.convert_to_kvectors(all_point_array)
         weighting_array = np.array(weighting)
         weighting_array = weighting_array[sort_indices]
         if return_artists:
@@ -547,7 +710,7 @@ class RegularSampler(Sampler):
                 [np.cos(arc_angles), np.sin(arc_angles)]
             ) * (self.kspace.fermi_radius * 2)
             wedge_vertices = np.vstack([[0.0, 0.0], wedge_vertices, [0.0, 0.0]])
-            wedge_polygon = Polygon(wedge_vertices)
+            wedge_polygon = PolygonDomain(wedge_vertices)
         else:
             opening_angle = 2*np.pi
         n_grid_points = self._npoints_from_constraint(vector_lengths, constraint)
@@ -597,11 +760,13 @@ class RegularSampler(Sampler):
                     p2 = (trial_point +vector1*0.5 +vector2*0.5).tolist()
                     p3 = (trial_point -vector1*0.5 +vector2*0.5).tolist()
                     square_vertices = [p0, p1, p2, p3]
-                    square_polygon = Polygon(square_vertices)
-                    intersect = wedge_polygon.intersection(square_polygon)
-                    weight = intersect.area
+                    square_polygon = PolygonDomain(square_vertices)
+                    try:
+                        intersect = intersect_convex_polygons(wedge_polygon, square_polygon)
+                        weight = intersect.area
+                    except ValueError:
+                        weight = 0.0
                     weighting.append(weight)
-                    xy = np.array(intersect.boundary.xy)
                     #new_patch = Polygon(xy.T)
                     #new_patch = PolygonPatch(intersect)
                     if return_artists:
@@ -617,7 +782,7 @@ class RegularSampler(Sampler):
         all_point_array = np.vstack(all_points)
         all_point_array, sort_indices = order_lexicographically(all_point_array,
                                                        return_sort_indices=True)
-        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+        all_kvs = self.kspace.convert_to_kvectors(all_point_array)
         weighting_array = np.array(weighting)
         if restrict_to_sym_cone:
             weighting_array /= weighting_array.sum()
@@ -683,8 +848,7 @@ class PeriodicSampler(Sampler):
         circ_y = radius*np.sin(phis)
         circ_z = np.zeros(phis.shape)
         circ_points = np.vstack([circ_x, circ_y, circ_z]).T
-        max_order = order**2
-        order_groups, distances = self.lattice.orders_by_distance(max_order)
+        order_groups, distances = self.lattice.translation_shells(order)
         group = order_groups[order-1]
 
         for row in range(group.shape[0]):
@@ -700,7 +864,7 @@ class PeriodicSampler(Sampler):
             if woods_points.shape[0] == 0:
                 continue
             n = self.kspace.fermi_radius / self.kspace.k0
-            woods_kvs.append(self.kspace.convert_to_KVectors(woods_points, n, 1.))
+            woods_kvs.append(self.kspace.convert_to_kvectors(woods_points, n, 1.))
         return woods_kvs
 
 
@@ -839,7 +1003,8 @@ class PeriodicSampler(Sampler):
         reduced_sym = self.lattice.unit_cell.symmetry()
         use_symmetry = True
         for i_family in range(n_sample_points):
-            central_point = sampling[i_family]
+            central_point = np.array(sampling[i_family], copy=True)
+            representative = np.array(central_point[:2], copy=True)
 
 
 
@@ -856,7 +1021,9 @@ class PeriodicSampler(Sampler):
             refl_rot_sym = symmetries[i_family][0]
             #trans_sym = symmetries[i_family][1]
             # sym_ops = []
-            new_points, n1, n2 = trans_sym.apply_symmetry_operators(central_point, n=n_max, return_orders=True)
+            new_points, n1, n2 = trans_sym.apply_symmetry_operators(
+                central_point, n=n_max, return_orders=True
+            )
 
             # dummy_, keep = self.lattice.unit_cell.crop_to_bz(new_points, return_indices=True)
             # keep = np.logical_not(keep)
@@ -901,9 +1068,17 @@ class PeriodicSampler(Sampler):
             sym_ops.append(refl_rot_sym)
             if new_points.shape[0]> 0:
                 bloch_array = new_points
-                kv_group = self.kspace.convert_to_KVectors(bloch_array, 1., 1)
-                bloch_fam = BlochFamily.from_kvector_group(kv_group)
-                bloch_fam.set_orders(n1, n2)
+                kv_group = self.kspace.convert_to_kvectors(bloch_array)
+                reciprocal_basis = np.vstack(
+                    (self.lattice.vectors.vec1[:2], self.lattice.vectors.vec2[:2])
+                )
+                bloch_fam = BlochFamily.from_kvector_group(
+                    kv_group,
+                    representative=representative,
+                    reciprocal_basis=reciprocal_basis,
+                    order1=n1,
+                    order2=n2,
+                )
                 bloch_families[i_family] = bloch_fam
             # for row in range(new_points.shape[0]):
             #     if inside_bz[row]:
@@ -913,7 +1088,7 @@ class PeriodicSampler(Sampler):
             # family_syms.append(sym_ops)
         all_point_array = np.vstack(all_points)
         all_point_array = order_lexicographically(all_point_array)
-        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+        all_kvs = self.kspace.convert_to_kvectors(all_point_array)
 
         return bloch_families, all_kvs, sym_ops
 
@@ -958,7 +1133,7 @@ class PeriodicSampler(Sampler):
                     all_values.append(sym_values[row])
         all_point_array = np.vstack(all_points)
         all_point_array, sorting = order_lexicographically(all_point_array, return_sort_indices=True)
-        all_kvs = self.kspace.convert_to_KVectors(all_point_array, 1., 1.)
+        all_kvs = self.kspace.convert_to_kvectors(all_point_array)
 
         if values is None:
             return all_kvs
@@ -1070,5 +1245,3 @@ def sum_triangles(xy, z, triangles):
         zsum += area * z[tri].mean(axis=0)
         areasum += area
     return (zsum, areasum)
-
-

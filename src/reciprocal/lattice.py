@@ -1,504 +1,554 @@
+"""Immutable two-dimensional lattice bases and classified lattices."""
+
+from __future__ import annotations
+
+import warnings
+from enum import Enum
+from functools import cached_property
+from typing import TYPE_CHECKING
+
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
 
 from reciprocal.bravais import BravaisLattice
+from reciprocal.cells.construction import (
+    make_conventional_cell,
+    make_primitive_cell,
+    reduce_basis,
+)
 from reciprocal.numerics import DEFAULT_TOLERANCES, Tolerances
-from reciprocal.unit_cell import UnitCell, order_lexicographically
-from reciprocal.utils import rotation2D
+
+if TYPE_CHECKING:
+    from reciprocal.unit_cell import UnitCell as LegacyUnitCell
+
+FloatArray = NDArray[np.float64]
+IntArray = NDArray[np.int64]
 
 
-def unit_vector(vector):
-    """ Returns the unit vector of the vector.  """
-    norm = np.linalg.norm(vector)
-    if not np.isfinite(norm) or norm == 0.0:
-        raise ValueError("lattice vectors must be finite and non-zero")
-    return vector / norm
+class LatticeType(str, Enum):
+    """Whether a lattice basis is expressed in direct or reciprocal space."""
 
-def angle_between(v1, v2):
-    """ Returns the angle in radians between vectors 'v1' and 'v2'::
-
-            >>> angle_between((1, 0, 0), (0, 1, 0))
-            1.5707963267948966
-            >>> angle_between((1, 0, 0), (1, 0, 0))
-            0.0
-            >>> angle_between((1, 0, 0), (-1, 0, 0))
-            3.141592653589793
-    """
-    v1_u = unit_vector(v1)
-    v2_u = unit_vector(v2)
-    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
-
-def make_lattice_points(first_orders, second_orders, vktr1, vktr2):
-    """Return a list of lattice points.
-
-    The lattice point with order N1 == N2 == 0 is excluded.
-
-    Parameters
-    ----------
-    first_orders: range
-        the integer orders of v1 to iterate over
-    second_orders: range
-        the integer orders of v2 to iterate over
-    vktr1: (2,)<np.double> np.array
-        the first lattice vector
-    vktr2: (2,)<np.double> np.array
-        the second lattice vector
-
-    Returns
-    -------
-    list of (2,)<np.double> np.array
-    """
-    lattice_points = []
-    for xi in first_orders:
-        for yi in second_orders:
-            if xi == 0 and yi == 0:
-                continue
-            pos = vktr1*xi+vktr2*yi
-            lattice_points.append(pos)
-    return lattice_points
-
-def get_unique_lengths(lattice_points):
-    """Return the unique distance from the origin to a set of lattice points.
-
-    Parameters
-    ----------
-    lattice_points: list of (2,)<np.double> np.array
-        the lattice points used to calculate unique distances
-
-    Returns
-    -------
-    list of floats
-        the unique distances from the origin to the lattice points
-
-    """
-    lengths = []
-    for point in lattice_points:
-        dist = np.linalg.norm(point)
-        lengths.append(dist)
-    lengths = np.array(lengths)
-    lengths = np.sort(np.unique(lengths))
-    return lengths
-
-def get_n_shortest(lattice_points, n_shortest, unique_lengths):
-    """Return N lattice points with smallest unique distance to the origin.
-
-    Parameters
-    ----------
-    lattice_points: (N,2)<np.double> np.ndarray
-        array of lattice points
-    n_shortest: 0<int<=2
-        how many lattice points to return
-    unique_lengths: list of floats
-        the unqiue distance to the origin of the lattice points
-
-    Returns
-    -------
-    list of (N,2)<np.double> np.ndarray
-        the lattice points with unique smallest distance to the origin
-    """
-    start_row = 0
-    n_found_vectors = 0
-    vectors = []
-    plot_n = 0
-    for length in unique_lengths:
-        for row in range(start_row, lattice_points.shape[0]):
-            pos = lattice_points[row, :]
-            dist = np.linalg.norm(pos)
-            conditions = np.isclose(dist, length)
-
-            if n_found_vectors == 1:
-                """the second vector needs to fulfill extra conditions"""
-                arg = np.clip(vectors[0].dot(pos)/
-                              (np.linalg.norm(vectors[0])*dist), -1.0, 1.0)
-                sep_angle = np.arccos(arg)
-                cross_prod = np.cross(vectors[0], pos)
-                obtuse = sep_angle >= np.pi*0.5
-                not_reflex = cross_prod[2] > 0.
-                linearly_independent = np.linalg.norm(cross_prod)/np.linalg.norm(vectors[0]) > 1e-3
-                conditions = conditions and obtuse
-                conditions = conditions and linearly_independent
-                conditions = conditions and not_reflex
-
-            if conditions:
-                vectors.append(pos)
-                n_found_vectors += 1
-                start_row = row
-                if n_found_vectors == n_shortest:
-                    return vectors
-
-    raise ValueError("not enough vectors found")
-
-def make_vectors(length1, length2, angle):
-    """Returns two vectors defined using lengths and angle between.
-
-    The first vector is assumed to lie along the x axis. Both vectors lie in the
-    x-y plane.
-    """
-    vec1 = length1*np.array([1.0, 0.0, 0.0])
-    vec2 = length2*np.array([np.cos(np.radians(angle)),
-                                       np.sin(np.radians(angle)), 0.0])
-    return vec1, vec2
-
-class LatticeVectors():
-    """
-    Defines two independent basis vectors of a lattice.
-
-    Use the class methods from_vectors, from_lengths_angle to construct.
-
-    Attribues
-    ---------
-    length1: float
-        length of the first lattice vector
-    length2: float
-        length of the second lattice vector
-    angle: float
-        angle between the lattice vectors in degrees
-    vec1: (3,)<float>np.array
-        first lattice vector
-    vec2: (3,)<float>np.array
-        second lattice vector
-
-    Methods
-    -------
-    from_vectors(vector1, vector2) [Constructor]
+    REAL_SPACE = "real_space"
+    RECIPROCAL = "reciprocal"
 
 
-    make_vectors(self)
-        sets vector class attributes from lengths and angle
-    reciprocal_vectors(self)
-        returns reciprocal lattice vectors
-    get_shortest_vectors(self)
-        return the shortest possible lattice vectors
+def _validate_tolerances(tolerances: Tolerances | None) -> Tolerances:
+    if tolerances is None:
+        return DEFAULT_TOLERANCES
+    if not isinstance(tolerances, Tolerances):
+        raise TypeError("tolerances must be a Tolerances instance")
+    return tolerances
+
+
+def unit_vector(vector: ArrayLike) -> FloatArray:
+    """Return a finite, nonzero vector normalized to unit length."""
+
+    array = np.asarray(vector, dtype=float)
+    if array.ndim != 1 or not np.all(np.isfinite(array)):
+        raise ValueError("vector must be a finite one-dimensional array")
+    scale = float(np.max(np.abs(array), initial=0.0))
+    if scale == 0.0:
+        raise ValueError("vector must be non-zero")
+    scaled = array / scale
+    return scaled / np.linalg.norm(scaled)
+
+
+def angle_between(first: ArrayLike, second: ArrayLike) -> float:
+    """Return the angle between two vectors in radians.
+
+    ``atan2`` remains accurate for angles close to zero and pi, where an
+    ``arccos`` of normalized vectors loses precision.
     """
 
-    def __init__(self, vector1, vector2):
-        """
-        initialize LatticeVectors object.
+    first_array = unit_vector(first)
+    second_array = unit_vector(second)
+    if first_array.shape != second_array.shape:
+        raise ValueError("vectors must have matching dimensions")
+    dot = float(np.clip(np.dot(first_array, second_array), -1.0, 1.0))
+    if first_array.size == 2:
+        perpendicular = abs(
+            float(first_array[0] * second_array[1] - first_array[1] * second_array[0])
+        )
+    elif first_array.size == 3:
+        perpendicular = float(np.linalg.norm(np.cross(first_array, second_array)))
+    else:
+        perpendicular = float(np.sqrt(max(0.0, 1.0 - dot * dot)))
+    return float(np.arctan2(perpendicular, dot))
 
-        Parameters
-        ----------
-        vector1: (3,)<np.double>np.array
-            first lattice vector
-        vector2: (3,)<np.double>np.array
-            second lattice vector
 
-        Returns
-        -------
-        LatticeVectors
-        """
-        vector1 = np.asarray(vector1, dtype=float)
-        vector2 = np.asarray(vector2, dtype=float)
-        if vector1.shape != vector2.shape or vector1.ndim != 1 or vector1.size not in (2, 3):
+def make_vectors(length1: float, length2: float, angle: float) -> tuple[FloatArray, FloatArray]:
+    """Return planar vectors with the first vector oriented along positive x."""
+
+    values = (length1, length2, angle)
+    if not all(np.isfinite(value) for value in values):
+        raise ValueError("lattice lengths and angle must be finite")
+    if length1 <= 0.0 or length2 <= 0.0:
+        raise ValueError("lattice lengths must be positive")
+    if not 0.0 < angle < 180.0:
+        raise ValueError("lattice angle must be strictly between 0 and 180 degrees")
+    angle_radians = np.radians(angle)
+    direction = np.array([np.cos(angle_radians), np.sin(angle_radians)])
+    direction[np.abs(direction) <= np.finfo(float).eps * 8] = 0.0
+    first = length1 * np.array([1.0, 0.0, 0.0])
+    second = length2 * np.array([direction[0], direction[1], 0.0])
+    return first, second
+
+
+class LatticeVectors:
+    """An immutable pair of independent planar lattice translations.
+
+    The canonical stored representation is a read-only ``(2, 3)`` row-basis
+    array. Lengths, angle, area, and the Gram matrix are derived properties, so
+    they cannot become inconsistent with the vectors.
+    """
+
+    __slots__ = ("_basis",)
+
+    def __init__(self, vector1: ArrayLike, vector2: ArrayLike) -> None:
+        first = np.asarray(vector1, dtype=float)
+        second = np.asarray(vector2, dtype=float)
+        if first.shape != second.shape or first.ndim != 1 or first.size not in (2, 3):
             raise ValueError("lattice vectors must have matching shape (2,) or (3,)")
-        if not np.all(np.isfinite(vector1)) or not np.all(np.isfinite(vector2)):
+        if not np.all(np.isfinite(first)) or not np.all(np.isfinite(second)):
             raise ValueError("lattice vectors must contain only finite values")
-        if np.linalg.norm(vector1) == 0.0 or np.linalg.norm(vector2) == 0.0:
-            raise ValueError("lattice vectors must be non-zero")
-        area = vector1[0] * vector2[1] - vector1[1] * vector2[0]
-        scale = np.linalg.norm(vector1) * np.linalg.norm(vector2)
-        if abs(area) / scale <= DEFAULT_TOLERANCES.degeneracy:
-            raise ValueError("lattice vectors must be linearly independent")
-        self.vec1 = vector1
-        self.vec2 = vector2
-        self.angle = np.degrees(angle_between(vector1, vector2))
-        self.length1 = np.linalg.norm(vector1)
-        self.length2 = np.linalg.norm(vector2)
+        if first.size == 2:
+            first = np.append(first, 0.0)
+            second = np.append(second, 0.0)
+        elif first[2] != 0.0 or second[2] != 0.0:
+            raise ValueError("lattice vectors must lie in the x-y plane")
 
-    def __repr__(self):
-        return f"LatticeVectors({self.vec1}, {self.vec2})"
+        first_length = float(np.linalg.norm(first))
+        second_length = float(np.linalg.norm(second))
+        if not np.isfinite(first_length) or not np.isfinite(second_length):
+            raise ValueError("lattice-vector lengths must be representable as finite floats")
+        if first_length == 0.0 or second_length == 0.0:
+            raise ValueError("lattice vectors must be non-zero at floating-point precision")
+        signed_area = float(first[0] * second[1] - first[1] * second[0])
+        if not np.isfinite(signed_area):
+            raise ValueError("lattice area must be representable as a finite float")
+        if abs(signed_area) / (first_length * second_length) <= DEFAULT_TOLERANCES.degeneracy:
+            raise ValueError("lattice vectors must be linearly independent")
+
+        basis_values = np.vstack((first, second)).astype(float, copy=False)
+        # Back the canonical array with immutable bytes. A simple write-protected
+        # owning ndarray can otherwise be made writable again with ``setflags``.
+        basis = np.frombuffer(basis_values.tobytes(), dtype=float).reshape(2, 3)
+        object.__setattr__(self, "_basis", basis)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if hasattr(self, "_basis"):
+            raise AttributeError("LatticeVectors is immutable")
+        object.__setattr__(self, name, value)
 
     @classmethod
-    def from_lengths_angle(lat_vec, length1, length2, angle):
-        """Return LatticeVectors from lengths and angle between.
+    def from_vectors(cls, vector1: ArrayLike, vector2: ArrayLike) -> LatticeVectors:
+        """Construct a basis from two explicit translations."""
 
-        typical usage:
-        lat_vec = LatticeVectors.from_lengths_angle(length1, length2, angle)
+        return cls(vector1, vector2)
 
-        Parameters
-        ----------
-        lat_vec: LatticeVector
-            an instance of this class
-        length1: float
-            length of the first lattice vector
-        length2: float
-            length of the second lattice vector
-        angle: float
-            angle between vectors in degrees
+    @classmethod
+    def from_lengths_angle(cls, length1: float, length2: float, angle: float) -> LatticeVectors:
+        """Construct a basis from two lengths and their angle in degrees."""
 
-        Returns
-        -------
-        LatticeVectors
-        """
-        if not all(np.isfinite(value) for value in (length1, length2, angle)):
-            raise ValueError("lattice lengths and angle must be finite")
-        if length1 <= 0 or length2 <= 0:
-            raise ValueError("lattice lengths must be positive")
-        if not 0 < angle < 180:
-            raise ValueError("lattice angle must be strictly between 0 and 180 degrees")
-        vectors = make_vectors(length1, length2, angle)
-        return lat_vec(vectors[0], vectors[1])
-
-    def reciprocal_vectors(self):
-        """Return reciprocal lattice vectors
-
-        Returns
-        -------
-        LatticeVectors
-        """
-        if self.vec1 is None or self.vec2 is None:
-            self.make_vectors()
-
-        direct_basis = np.column_stack([self.vec1[:2], self.vec2[:2]])
-        reciprocal_basis = 2 * np.pi * np.linalg.inv(direct_basis).T
-        b1 = reciprocal_basis[:, 0]
-        b2 = reciprocal_basis[:, 1]
-        if self.vec1.size == 3:
-            b1 = np.append(b1, 0.0)
-            b2 = np.append(b2, 0.0)
-        return LatticeVectors(vector1=b1, vector2=b2)
-
-    def get_shortest_vectors(self):
-        """Return arrays of lattice vectors that are as short as possible.
-
-        Returns
-        -------
-        (2,) tuple of (3,)<np.double> np.array
-        """
-        n_shortest = 1
-        if np.isclose(
-            self.length1,
-            self.length2,
-            rtol=DEFAULT_TOLERANCES.relative,
-            atol=DEFAULT_TOLERANCES.absolute,
-        ):
-            first = 2
-            second = 2
-            n_shortest = 2
-        if self.length1 > self.length2:
-            second = int(np.ceil(self.length1/self.length2))
-            first = 2
-        else:
-            first = int(np.ceil(self.length2/self.length1))
-            second = 2
-
-        first_orders = range(-first, first+1)
-        second_orders = range(-second, second+1)
-
-        lattice_points = make_lattice_points(first_orders, second_orders,
-                                             self.vec1, self.vec2)
-        unique_lengths = get_unique_lengths(lattice_points)
-        lattice_points = np.array(lattice_points)
-        lattice_points = order_lexicographically(lattice_points,
-                                                 start=0.5*np.pi-1e-1)
-
-        vectors = []
-        vectors = get_n_shortest(lattice_points, 2, unique_lengths)
-        vectors = np.concatenate([vectors])
-        return vectors[0, :], vectors[1, :]
-
-
-
-
-class Lattice():
-    """
-    Defines a periodic lattice in 2D
-
-    Attributes
-    ----------
-    lattice_type: str
-        real-space or reciprocal
-    vectors: LatticeVectors
-        the lattice vectors defining the lattice
-    bravais: BravaisLattice
-        bravias lattice type (see class BravaisLattice)
-    unit_cell: UnitCell
-        the unit cell of the lattice
-    brillouin_zone: UnitCell
-        alias for unit_cell
-
-    Methods
-    -------
-    from_lat_vec_args(lattice, kwargs)
-        constructs a Lattice object using kwargs for a LatticeVector object
-    make_reciprocal(self)
-        returns a Lattice object defined by the reciprocal of this lattice
-
-    """
-    def __init__(self, lattice_vectors, lattice_type='real_space'):
-        """
-        initialize Lattice object.
-
-        The standard constructor for this class takes a LatticeVectors argument.
-        Alternatively the class method from_lat_vec_args may be used.
-
-        Parameters
-        ----------
-        lattice_vectors LatticeVectors
-            the lattice vectors
-
-        Returns
-        -------
-        Lattice
-        """
-        valid_lattice_types = ("real_space", "reciprocal")
-        if lattice_type not in valid_lattice_types:
-            raise ValueError("lattice type {}".format(lattice_type) +
-                             " not understood. lattice type must be in range "+
-                             "({})".format(valid_lattice_types))
-        self.lattice_type = lattice_type
-        #if lattice_vectors is None:
-        #    lattice_vectors = LatticeVectors(**lv_args)
-        #else:
-        #    lattice_vectors = lattice_vectors
-        self.vectors = lattice_vectors
-        self.bravais =  self.determine_bravais_lattice()
-        if self.lattice_type == 'real_space':
-            self.unit_cell = UnitCell(self, WignerSeitz=False)
-        else:
-            self.unit_cell = UnitCell(self, WignerSeitz=True)
-
-    def __repr__(self):
-        return f"Lattice({self.vectors}, {self.lattice_type})"
+        first, second = make_vectors(length1, length2, angle)
+        return cls(first, second)
 
     @property
-    def brillouin_zone(self):
-        return self.unit_cell
+    def basis(self) -> FloatArray:
+        view = self._basis.view()
+        view.setflags(write=False)
+        return view
 
-    @brillouin_zone.setter
-    def brillouin_zone(self, unit_cell):
-        self.unit_cell = unit_cell
+    @property
+    def vec1(self) -> FloatArray:
+        view = self._basis[0].view()
+        view.setflags(write=False)
+        return view
+
+    @property
+    def vec2(self) -> FloatArray:
+        view = self._basis[1].view()
+        view.setflags(write=False)
+        return view
+
+    @property
+    def length1(self) -> float:
+        return float(np.linalg.norm(self.vec1))
+
+    @property
+    def length2(self) -> float:
+        return float(np.linalg.norm(self.vec2))
+
+    @property
+    def lengths(self) -> FloatArray:
+        values = np.linalg.norm(self._basis[:, :2], axis=1)
+        values.setflags(write=False)
+        return values
+
+    @property
+    def angle(self) -> float:
+        return float(np.degrees(angle_between(self.vec1, self.vec2)))
+
+    @property
+    def signed_area(self) -> float:
+        return float(self.vec1[0] * self.vec2[1] - self.vec1[1] * self.vec2[0])
+
+    @property
+    def area(self) -> float:
+        return abs(self.signed_area)
+
+    @property
+    def gram_matrix(self) -> FloatArray:
+        gram = self._basis[:, :2] @ self._basis[:, :2].T
+        gram.setflags(write=False)
+        return gram
+
+    def reciprocal_vectors(self) -> LatticeVectors:
+        """Return the reciprocal basis satisfying ``a_i dot b_j = 2*pi delta_ij``."""
+
+        direct_columns = self._basis[:, :2].T
+        reciprocal_columns = np.linalg.solve(direct_columns.T, 2.0 * np.pi * np.eye(2))
+        return type(self)(
+            np.append(reciprocal_columns[:, 0], 0.0),
+            np.append(reciprocal_columns[:, 1], 0.0),
+        )
+
+    def get_shortest_vectors(self) -> tuple[FloatArray, FloatArray]:
+        """Return a deterministic Gauss-reduced basis of successive minima."""
+
+        reduced = reduce_basis(self)
+        return reduced[0].copy(), reduced[1].copy()
+
+    def __repr__(self) -> str:
+        return f"LatticeVectors({self.vec1!r}, {self.vec2!r})"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, LatticeVectors) and np.array_equal(self._basis, other._basis)
+
+    def __hash__(self) -> int:
+        return hash(self._basis.tobytes())
+
+
+def classify_bravais(
+    vectors: LatticeVectors, tolerances: Tolerances | None = None
+) -> BravaisLattice:
+    """Classify a two-dimensional lattice from a reduced Gram matrix."""
+
+    if not isinstance(vectors, LatticeVectors):
+        raise TypeError("vectors must be a LatticeVectors instance")
+    policy = _validate_tolerances(tolerances)
+    reduced = reduce_basis(vectors)[:, :2]
+    gram = reduced @ reduced.T
+    first_length, second_length = np.sqrt(np.diag(gram))
+    equal_lengths = np.isclose(
+        first_length,
+        second_length,
+        rtol=policy.relative,
+        atol=policy.absolute,
+    )
+    cosine = float(gram[0, 1] / (first_length * second_length))
+    angular_tolerance = float(np.radians(policy.angle_degrees))
+    orthogonal = np.isclose(cosine, 0.0, rtol=0.0, atol=angular_tolerance)
+    hexagonal_angle = np.isclose(abs(cosine), 0.5, rtol=0.0, atol=angular_tolerance)
+    # A rhombic primitive basis can Gauss-reduce to unequal successive minima
+    # on the boundary 2|a.b| = min(|a|^2, |b|^2). It still describes a
+    # centered-rectangular lattice and commonly appears in reciprocal bases.
+    metric_scale = max(float(np.max(np.abs(gram))), np.finfo(float).tiny)
+    reduction_boundary = np.isclose(
+        2.0 * abs(float(gram[0, 1])),
+        min(float(gram[0, 0]), float(gram[1, 1])),
+        rtol=policy.relative,
+        atol=policy.absolute + angular_tolerance * metric_scale,
+    )
+
+    if equal_lengths and hexagonal_angle:
+        return BravaisLattice.HEXAGONAL
+    if equal_lengths and orthogonal:
+        return BravaisLattice.SQUARE
+    if equal_lengths or reduction_boundary:
+        return BravaisLattice.CENTERED_RECTANGULAR
+    if orthogonal:
+        return BravaisLattice.RECTANGULAR
+    return BravaisLattice.OBLIQUE
+
+
+def _validate_nonnegative_integer(value: int, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise TypeError(f"{name} must be an integer")
+    result = int(value)
+    if result < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return result
+
+
+def _coefficient_orders(max_coefficient: int) -> IntArray:
+    coefficients = np.arange(-max_coefficient, max_coefficient + 1, dtype=np.int64)
+    first, second = np.meshgrid(coefficients, coefficients, indexing="ij")
+    orders = np.column_stack((first.ravel(), second.ravel()))
+    return orders[np.any(orders != 0, axis=1)]
+
+
+def _group_orders(
+    orders: IntArray,
+    basis: FloatArray,
+    tolerances: Tolerances,
+) -> tuple[list[IntArray], FloatArray]:
+    if len(orders) == 0:
+        return [], np.empty(0, dtype=float)
+    gram = basis[:, :2] @ basis[:, :2].T
+    squared_distances = np.einsum("ni,ij,nj->n", orders, gram, orders)
+    distances = np.sqrt(np.maximum(squared_distances, 0.0))
+    ordering = np.lexsort((orders[:, 1], orders[:, 0], distances))
+    orders = orders[ordering]
+    distances = distances[ordering]
+
+    groups: list[IntArray] = []
+    representatives: list[float] = []
+    start = 0
+    for index in range(1, len(distances) + 1):
+        at_end = index == len(distances)
+        same_group = not at_end and np.isclose(
+            distances[index],
+            distances[start],
+            rtol=tolerances.relative,
+            atol=tolerances.absolute,
+        )
+        if same_group:
+            continue
+        group = np.array(orders[start:index], dtype=np.int64, copy=True)
+        group.setflags(write=False)
+        groups.append(group)
+        representatives.append(float(distances[start]))
+        start = index
+    result_distances = np.asarray(representatives, dtype=float)
+    result_distances.setflags(write=False)
+    return groups, result_distances
+
+
+class Lattice:
+    """An immutable classified 2D lattice with lazily derived cells."""
+
+    __slots__ = ("_bravais", "_initialized", "_lattice_type", "_vectors", "__dict__")
+
+    def __init__(
+        self,
+        lattice_vectors: LatticeVectors,
+        lattice_type: str | LatticeType = LatticeType.REAL_SPACE,
+    ) -> None:
+        if not isinstance(lattice_vectors, LatticeVectors):
+            raise TypeError("lattice_vectors must be a LatticeVectors instance")
+        try:
+            parsed_type = LatticeType(lattice_type)
+        except (TypeError, ValueError) as error:
+            choices = tuple(item.value for item in LatticeType)
+            raise ValueError(f"lattice type must be one of {choices}") from error
+
+        object.__setattr__(self, "_initialized", False)
+        object.__setattr__(
+            self,
+            "_vectors",
+            LatticeVectors(lattice_vectors.vec1, lattice_vectors.vec2),
+        )
+        object.__setattr__(self, "_lattice_type", parsed_type)
+        object.__setattr__(self, "_bravais", classify_bravais(self._vectors))
+        object.__setattr__(self, "_initialized", True)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if getattr(self, "_initialized", False):
+            raise AttributeError("Lattice is immutable; construct a new lattice instead")
+        object.__setattr__(self, name, value)
+
+    @property
+    def vectors(self) -> LatticeVectors:
+        return self._vectors
+
+    @property
+    def lattice_type(self) -> str:
+        return self._lattice_type.value
+
+    @property
+    def bravais(self) -> BravaisLattice:
+        return self._bravais
+
+    @cached_property
+    def primitive_cell(self):
+        return make_primitive_cell(self.vectors)
+
+    @cached_property
+    def conventional_cell(self):
+        return make_conventional_cell(self.vectors, self.bravais)
+
+    @cached_property
+    def brillouin_zone(self):
+        from reciprocal.brillouin_zone import make_brillouin_zone
+
+        return make_brillouin_zone(self)
+
+    @cached_property
+    def unit_cell(self) -> LegacyUnitCell:
+        """Return the lazily constructed legacy compatibility cell."""
+
+        from reciprocal.unit_cell import UnitCell as LegacyUnitCell
+
+        warnings.warn(
+            "Lattice.unit_cell is deprecated; use primitive_cell, conventional_cell, "
+            "or brillouin_zone",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return LegacyUnitCell(self, WignerSeitz=self._lattice_type is LatticeType.RECIPROCAL)
 
     @classmethod
-    def from_lat_vec_args(lattice, **kwargs):
-        """
-        construct a Lattice using kwargs for a LatticeVectors object.
+    def from_vectors(
+        cls,
+        vector1: ArrayLike,
+        vector2: ArrayLike,
+        *,
+        lattice_type: str | LatticeType = LatticeType.REAL_SPACE,
+    ) -> Lattice:
+        return cls(LatticeVectors(vector1, vector2), lattice_type=lattice_type)
 
-        This methods constructs the LatticeVectors object needed to construct
-        a Lattice. This requires keyword argments to determine the correct
-        LatticeVector constructor to use. kwargs must contain either vector1 and
-        vector2, or length1, length2 and angle.
+    @classmethod
+    def from_lengths_angle(
+        cls,
+        length1: float,
+        length2: float,
+        angle: float,
+        *,
+        lattice_type: str | LatticeType = LatticeType.REAL_SPACE,
+    ) -> Lattice:
+        vectors = LatticeVectors.from_lengths_angle(length1, length2, angle)
+        return cls(vectors, lattice_type=lattice_type)
 
-        Parameters
-        ----------
-        lattice: Lattice
-            A Lattice object
-        vector1: (2,)<np.double>np.array
-            The first lattice vector
-        vector2: (2,)<np.double>np.array
-            The second lattice vector
-        length1: float
-            The length of the first lattice vector
-        length2: float
-            The length of the second lattice vector
-        angle: float
-            The angle between lattice vectors in degrees
+    @classmethod
+    def from_lat_vec_args(cls, **kwargs: object) -> Lattice:
+        """Compatibility constructor accepting one exact vector argument form."""
 
-        Returns
-        -------
-        Lattice
-        """
-        if "vector1" in kwargs and "vector2" in kwargs:
-            lat_vec = LatticeVectors(kwargs["vector1"], kwargs["vector2"])
-        elif all(key in kwargs for key in ("length1", "length2", "angle")):
-            lat_vec = LatticeVectors.from_lengths_angle(
-                kwargs["length1"], kwargs["length2"], kwargs["angle"]
+        values = dict(kwargs)
+        lattice_type = values.pop("lattice_type", LatticeType.REAL_SPACE)
+        keys = set(values)
+        if keys == {"vector1", "vector2"}:
+            return cls.from_vectors(
+                values["vector1"],
+                values["vector2"],
+                lattice_type=lattice_type,  # type: ignore[arg-type]
             )
-        else:
-            raise ValueError(
-                "expected vector1/vector2 or length1/length2/angle; got {}".format(
-                    sorted(kwargs)
-                )
+        if keys == {"length1", "length2", "angle"}:
+            return cls.from_lengths_angle(
+                float(values["length1"]),
+                float(values["length2"]),
+                float(values["angle"]),
+                lattice_type=lattice_type,  # type: ignore[arg-type]
             )
-        return lattice(lat_vec)
-
-    def make_reciprocal(self):
-        """Return a Lattice object defined by the reciprocal of this lattice.
-
-        Returns
-        -------
-        Lattice
-        """
-        r_vectors = self.vectors.reciprocal_vectors()
-        return Lattice(r_vectors, lattice_type='reciprocal')
-
-    def determine_bravais_lattice(self, tolerances=None):
-        """
-        determines the 2D bravais lattice of the unit cell
-
-        Uses the vector lengths and angles of the lattice vectors to determine
-        the bravais lattice.
-
-        Returns
-        -------
-        BravaisLattice
-        """
-        if tolerances is None:
-            tolerances = DEFAULT_TOLERANCES
-        if not isinstance(tolerances, Tolerances):
-            raise TypeError("tolerances must be a Tolerances instance")
-        length1 = self.vectors.length1
-        length2 = self.vectors.length2
-        angle = self.vectors.angle
-        co_angle = 180. - angle
-        equal_lengths = np.isclose(
-            length1,
-            length2,
-            rtol=tolerances.relative,
-            atol=tolerances.absolute,
+        raise ValueError(
+            "expected exactly vector1/vector2 or length1/length2/angle; " f"got {sorted(keys)}"
         )
-        is_120 = np.isclose(angle, 120.0, rtol=0.0, atol=tolerances.angle_degrees)
-        is_90 = np.isclose(angle, 90.0, rtol=0.0, atol=tolerances.angle_degrees)
-        rectangular_projection = np.isclose(
-            length2 * np.cos(np.radians(co_angle)),
-            length1,
-            rtol=tolerances.relative,
-            atol=tolerances.absolute,
-        )
-        if equal_lengths and is_120:
-            bv_lat = BravaisLattice.HEXAGONAL
-        elif equal_lengths and is_90:
-            bv_lat = BravaisLattice.SQUARE
-        elif is_90 or rectangular_projection:
-            bv_lat = BravaisLattice.RECTANGULAR
+
+    def make_reciprocal(self) -> Lattice:
+        """Return the reciprocal of a real-space lattice.
+
+        Reciprocal-of-reciprocal construction is intentionally rejected so
+        that the returned object's space semantics are never ambiguous.
+        """
+
+        if self._lattice_type is LatticeType.RECIPROCAL:
+            raise ValueError("make_reciprocal() requires a real-space lattice")
+        return type(self)(self.vectors.reciprocal_vectors(), LatticeType.RECIPROCAL)
+
+    def determine_bravais_lattice(self, tolerances: Tolerances | None = None) -> BravaisLattice:
+        """Compatibility wrapper for :func:`classify_bravais`."""
+
+        return classify_bravais(self.vectors, tolerances)
+
+    def enumerate_orders(self, max_coefficient: int) -> tuple[IntArray, FloatArray]:
+        """Return translations in a finite coefficient square.
+
+        This is coefficient enumeration, not a guarantee of complete radial
+        shells. Use :meth:`translation_shells` when shell completeness matters.
+        """
+
+        maximum = _validate_nonnegative_integer(max_coefficient, "max_coefficient")
+        orders = _coefficient_orders(maximum)
+        if len(orders) == 0:
+            distances = np.empty(0, dtype=float)
         else:
-            bv_lat = BravaisLattice.OBLIQUE
-        return bv_lat
+            gram = self.vectors.gram_matrix
+            squared = np.einsum("ni,ij,nj->n", orders, gram, orders)
+            distances = np.sqrt(np.maximum(squared, 0.0))
+            ordering = np.lexsort((orders[:, 1], orders[:, 0], distances))
+            orders = orders[ordering]
+            distances = distances[ordering]
+        orders = np.array(orders, dtype=np.int64, copy=True)
+        distances = np.array(distances, dtype=float, copy=True)
+        orders.setflags(write=False)
+        distances.setflags(write=False)
+        return orders, distances
 
-    def orders_by_distance(self, max_order):
+    def orders_by_distance(
+        self,
+        max_order: int,
+        tolerances: Tolerances | None = None,
+    ) -> tuple[list[IntArray], FloatArray]:
+        """Group a finite coefficient square by translation distance.
+
+        This compatibility method preserves the historical coefficient-bound
+        meaning of ``max_order`` without decimal rounding.
         """
-        Returns lattices orders grouped by equal distance
 
-        Parameters
-        ----------
-        max_order: int
-            the maximum order of lattice vector to consider
+        maximum = _validate_nonnegative_integer(max_order, "max_order")
+        policy = _validate_tolerances(tolerances)
+        return _group_orders(_coefficient_orders(maximum), self.vectors.basis, policy)
 
-        Returns
-        -------
-        list of (N,2) <np.int> np.array
-            the lattice orders
-        (M,1) <np.double> np.array
-            the associated distances
-        """
-        vec1 = self.vectors.vec1
-        vec2 = self.vectors.vec2
-        n_rows = (2*max_order+1)**2
-        order_table = np.zeros((n_rows, 3))
-        row = 0
-        for order1 in range(-max_order, max_order+1):
-            for order2 in range(-max_order, max_order+1):
-                distance = np.linalg.norm(vec1*order1 + vec2*order2)
-                order_table[row,:] = np.array([order1, order2, distance])
-                row += 1
-        sort_indices = np.argsort(order_table[:,2])
-        order_table = order_table[sort_indices, :][1:, :]
-        order_table[:,2] = np.round(order_table[:,2], 5)
-        unique_distances = np.unique(order_table[:,2])
-        orders_list = []
-        for unique_dist in unique_distances:
-            equal_to_distance = np.isclose(order_table[:,2],unique_dist)
-            order_array = order_table[equal_to_distance, :2]
-            order_array = order_array.astype('int64')
-            orders_list.append(order_array)
-        return orders_list, unique_distances
+    def translation_shells(
+        self,
+        number_of_shells: int,
+        tolerances: Tolerances | None = None,
+    ) -> tuple[list[IntArray], FloatArray]:
+        """Return complete radial shells, expressed in the original basis."""
 
-    #def lies_on_bz_edge(self, points):
+        count = _validate_nonnegative_integer(number_of_shells, "number_of_shells")
+        policy = _validate_tolerances(tolerances)
+        if count == 0:
+            return [], np.empty(0, dtype=float)
+
+        original = self.vectors.basis[:, :2]
+        reduced = reduce_basis(self.vectors)[:, :2]
+        transformation = np.linalg.solve(original.T, reduced.T).T
+        integer_transformation = np.rint(transformation).astype(np.int64)
+        if not np.allclose(transformation, integer_transformation, rtol=0.0, atol=1e-9):
+            raise RuntimeError("basis reduction did not produce an integer transformation")
+
+        smallest_singular_value = float(np.min(np.linalg.svd(reduced, compute_uv=False)))
+        maximum = max(1, count)
+        for _ in range(32):
+            reduced_orders = _coefficient_orders(maximum)
+            groups, distances = _group_orders(reduced_orders, reduced, policy)
+            if len(groups) >= count:
+                target_distance = float(distances[count - 1])
+                outside_lower_bound = smallest_singular_value * (maximum + 1)
+                allowance = policy.absolute + policy.relative * target_distance
+                if outside_lower_bound > target_distance + allowance:
+                    original_groups = []
+                    for group in groups[:count]:
+                        converted = group @ integer_transformation
+                        converted = np.asarray(converted, dtype=np.int64)
+                        converted.setflags(write=False)
+                        original_groups.append(converted)
+                    result_distances = np.array(distances[:count], copy=True)
+                    result_distances.setflags(write=False)
+                    return original_groups, result_distances
+            maximum *= 2
+        raise RuntimeError("could not establish complete translation shells")
+
+    def __repr__(self) -> str:
+        return f"Lattice({self.vectors!r}, lattice_type={self.lattice_type!r})"
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, Lattice)
+            and self._lattice_type is other._lattice_type
+            and self.vectors == other.vectors
+        )
+
+    def __hash__(self) -> int:
+        return hash((self._lattice_type, self.vectors))

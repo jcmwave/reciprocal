@@ -1,6 +1,300 @@
-import numpy as np
+from dataclasses import dataclass
 from enum import Enum, auto
+
+import numpy as np
+from numpy.typing import ArrayLike, NDArray
+
+from reciprocal.bravais import BravaisLattice
+from reciprocal.numerics import DEFAULT_TOLERANCES
 from reciprocal.utils import rotation2D, reflection2D, translation2D
+
+FloatArray = NDArray[np.float64]
+IntArray = NDArray[np.int64]
+
+
+def _immutable_array(value, dtype, shape, name):
+    array = np.asarray(value, dtype=dtype)
+    if array.shape != shape or not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must be a finite {shape} matrix")
+    result = np.array(array, copy=True)
+    result.setflags(write=False)
+    return result
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class PointOperation:
+    """An orthogonal planar point operation in fractional and Cartesian bases."""
+
+    fractional: IntArray
+    cartesian: FloatArray
+
+    def __post_init__(self):
+        fractional_float = np.asarray(self.fractional, dtype=float)
+        if fractional_float.shape != (2, 2) or not np.allclose(fractional_float, np.rint(fractional_float)):
+            raise ValueError("fractional operation must be a 2 by 2 integer matrix")
+        fractional = _immutable_array(np.rint(fractional_float), np.int64, (2, 2), "fractional")
+        cartesian = np.asarray(self.cartesian, dtype=float)
+        if cartesian.shape == (2, 2):
+            cartesian = np.block([[cartesian, np.zeros((2, 1))], [np.zeros((1, 2)), np.ones((1, 1))]])
+        cartesian = _immutable_array(cartesian, float, (3, 3), "cartesian")
+        if not np.allclose(cartesian.T @ cartesian, np.eye(3), rtol=1e-9, atol=1e-10):
+            raise ValueError("cartesian operation must be orthogonal")
+        object.__setattr__(self, "fractional", fractional)
+        object.__setattr__(self, "cartesian", cartesian)
+
+    @property
+    def determinant(self):
+        return int(round(np.linalg.det(self.fractional)))
+
+    def apply(self, points: ArrayLike) -> FloatArray:
+        array = np.asarray(points, dtype=float)
+        if array.ndim not in (1, 2) or array.shape[-1] not in (2, 3):
+            raise ValueError("points must end in a coordinate dimension of length two or three")
+        if array.shape[-1] == 2:
+            array = np.concatenate((array, np.zeros(array.shape[:-1] + (1,))), axis=-1)
+        return array @ self.cartesian.T
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, PointOperation)
+            and np.array_equal(self.fractional, other.fractional)
+            and np.array_equal(self.cartesian, other.cartesian)
+        )
+
+    def __hash__(self):
+        return hash((self.fractional.tobytes(), self.cartesian.tobytes()))
+
+
+@dataclass(frozen=True, slots=True)
+class PointGroup:
+    """A finite collection of concrete lattice-preserving operations."""
+
+    operations: tuple[PointOperation, ...]
+    name: str
+
+    def __post_init__(self):
+        if not self.operations or not all(
+            isinstance(operation, PointOperation) for operation in self.operations
+        ):
+            raise ValueError("a point group requires concrete PointOperation values")
+        object.__setattr__(self, "operations", tuple(self.operations))
+
+    def __iter__(self):
+        return iter(self.operations)
+
+    def __len__(self):
+        return len(self.operations)
+
+    def __getitem__(self, index):
+        return self.operations[index]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class OrbitMember:
+    """A point-orbit member and every operation that generates it."""
+
+    point: FloatArray
+    generating_operations: tuple[PointOperation, ...]
+
+    def __post_init__(self):
+        point = np.asarray(self.point, dtype=float)
+        if point.shape != (3,) or not np.all(np.isfinite(point)):
+            raise ValueError("orbit-member point must be a finite three-vector")
+        if not self.generating_operations:
+            raise ValueError("an orbit member requires at least one generating operation")
+        result = np.array(point, copy=True)
+        result.setflags(write=False)
+        object.__setattr__(self, "point", result)
+        object.__setattr__(self, "generating_operations", tuple(self.generating_operations))
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class PointOrbit:
+    """A representative and its provenance-preserving point-group orbit."""
+
+    representative: FloatArray
+    reciprocal_basis: FloatArray
+    point_group: PointGroup
+    members: tuple[OrbitMember, ...]
+
+    def __post_init__(self):
+        representative = np.asarray(self.representative, dtype=float)
+        if representative.shape not in ((2,), (3,)) or not np.all(np.isfinite(representative)):
+            raise ValueError("representative must be a finite planar vector")
+        if representative.shape == (3,) and representative[2] != 0:
+            raise ValueError("representative must lie in the x-y plane")
+        rep = np.array([representative[0], representative[1], 0.0])
+        rep.setflags(write=False)
+        basis = np.asarray(self.reciprocal_basis, dtype=float)
+        if basis.shape not in ((2, 2), (2, 3)):
+            raise ValueError("reciprocal_basis must have shape (2, 2) or (2, 3)")
+        basis = np.array(basis, copy=True)
+        basis.setflags(write=False)
+        object.__setattr__(self, "representative", rep)
+        object.__setattr__(self, "reciprocal_basis", basis)
+        object.__setattr__(self, "members", tuple(self.members))
+
+    @property
+    def points(self):
+        result = np.vstack([member.point for member in self.members])
+        result.setflags(write=False)
+        return result
+
+
+def _basis_matrix(reciprocal_basis: ArrayLike) -> FloatArray:
+    basis = np.asarray(reciprocal_basis, dtype=float)
+    if basis.shape == (2, 3):
+        basis = basis[:, :2].T
+    elif basis.shape == (2, 2):
+        # Cell bases are row-oriented. This convention is intentionally used
+        # throughout the new subsystem.
+        basis = basis.T
+    else:
+        raise ValueError("reciprocal_basis must have shape (2, 2) or (2, 3)")
+    if not np.all(np.isfinite(basis)) or abs(np.linalg.det(basis)) == 0.0:
+        raise ValueError("reciprocal_basis must be finite and independent")
+    return basis
+
+
+def point_group(
+    reciprocal_basis: ArrayLike,
+    bravais: BravaisLattice,
+    *,
+    tolerance: float = DEFAULT_TOLERANCES.relative,
+) -> PointGroup:
+    """Return all integer metric automorphisms of a 2D lattice.
+
+    Enumeration avoids assumptions about vector signs, exchange, or whether a
+    hexagonal primitive basis uses a 60- or 120-degree representation.
+    """
+    if not np.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("tolerance must be finite and non-negative")
+    basis = _basis_matrix(reciprocal_basis)
+    metric = basis.T @ basis
+    expected = {
+        BravaisLattice.OBLIQUE: 2,
+        BravaisLattice.RECTANGULAR: 4,
+        BravaisLattice.CENTERED_RECTANGULAR: 4,
+        BravaisLattice.SQUARE: 8,
+        BravaisLattice.HEXAGONAL: 12,
+    }[bravais]
+    operations = []
+    for entries in np.ndindex((13, 13, 13, 13)):
+        matrix = np.asarray(entries, dtype=int).reshape(2, 2) - 6
+        if abs(round(np.linalg.det(matrix))) != 1:
+            continue
+        metric_tolerance = tolerance * max(float(np.max(np.abs(metric))), np.finfo(float).tiny)
+        if not np.allclose(
+            matrix.T @ metric @ matrix,
+            metric,
+            rtol=tolerance,
+            atol=metric_tolerance,
+        ):
+            continue
+        cartesian2 = basis @ matrix @ np.linalg.inv(basis)
+        operations.append(PointOperation(matrix, cartesian2))
+    operations.sort(key=lambda item: tuple(item.fractional.ravel()))
+    if len(operations) != expected:
+        raise ValueError(
+            f"basis has {len(operations)} metric symmetries, inconsistent with {bravais.name} ({expected})"
+        )
+    name = {2: "C2", 4: "D2", 8: "D4", 12: "D6"}[expected]
+    return PointGroup(tuple(operations), name)
+
+
+def equivalent_mod_lattice(
+    first: ArrayLike,
+    second: ArrayLike,
+    reciprocal_basis: ArrayLike,
+    *,
+    tolerance: float = DEFAULT_TOLERANCES.relative,
+) -> bool:
+    if not np.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("tolerance must be finite and non-negative")
+    basis = _basis_matrix(reciprocal_basis)
+    first_array = np.asarray(first, dtype=float)[:2]
+    second_array = np.asarray(second, dtype=float)[:2]
+    delta = np.linalg.solve(basis, first_array - second_array)
+    return bool(np.allclose(delta, np.rint(delta), rtol=0.0, atol=tolerance))
+
+
+def little_group(
+    point: ArrayLike,
+    reciprocal_basis: ArrayLike,
+    operations: PointGroup | tuple[PointOperation, ...],
+    *,
+    tolerance: float = DEFAULT_TOLERANCES.relative,
+) -> tuple[PointOperation, ...]:
+    if not np.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("tolerance must be finite and non-negative")
+    basis = _basis_matrix(reciprocal_basis)
+    coordinate = np.linalg.solve(basis, np.asarray(point, dtype=float)[:2])
+    result = []
+    for operation in operations:
+        delta = operation.fractional @ coordinate - coordinate
+        if np.allclose(delta, np.rint(delta), rtol=0.0, atol=tolerance):
+            result.append(operation)
+    return tuple(result)
+
+
+def point_orbit(
+    point: ArrayLike,
+    reciprocal_basis: ArrayLike,
+    operations: PointGroup | tuple[PointOperation, ...],
+    *,
+    tolerance: float = DEFAULT_TOLERANCES.relative,
+) -> tuple[FloatArray, ...]:
+    """Return unique orbit coordinates.
+
+    Use :func:`point_orbit_with_operations` when generation provenance is
+    required.
+    """
+    orbit = point_orbit_with_operations(
+        point, reciprocal_basis, operations, tolerance=tolerance
+    )
+    return tuple(member.point for member in orbit.members)
+
+
+def point_orbit_with_operations(
+    point: ArrayLike,
+    reciprocal_basis: ArrayLike,
+    operations: PointGroup | tuple[PointOperation, ...],
+    *,
+    tolerance: float = DEFAULT_TOLERANCES.relative,
+) -> PointOrbit:
+    """Return a point orbit retaining all operations generating each member."""
+    if not np.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("tolerance must be finite and non-negative")
+    basis = _basis_matrix(reciprocal_basis)
+    coordinate = np.linalg.solve(basis, np.asarray(point, dtype=float)[:2])
+    grouped_operations = []
+    fractional_members = []
+    for operation in operations:
+        transformed = operation.fractional @ coordinate
+        canonical = transformed - np.floor(transformed + 0.5)
+        matches = [
+            index
+            for index, existing in enumerate(fractional_members)
+            if np.allclose(canonical, existing, rtol=0.0, atol=tolerance)
+        ]
+        if matches:
+            grouped_operations[matches[0]].append(operation)
+            continue
+        fractional_members.append(canonical)
+        grouped_operations.append([operation])
+    members = []
+    for canonical, generating_operations in zip(fractional_members, grouped_operations):
+        cartesian = basis @ canonical
+        member = np.array([cartesian[0], cartesian[1], 0.0])
+        members.append(OrbitMember(member, tuple(generating_operations)))
+    members.sort(key=lambda item: (item.point[0], item.point[1]))
+    group = operations if isinstance(operations, PointGroup) else PointGroup(tuple(operations), "custom")
+    return PointOrbit(
+        np.asarray(point, dtype=float),
+        np.asarray(reciprocal_basis, dtype=float),
+        group,
+        tuple(members),
+    )
 
 class SpecialPoint(Enum):
     GAMMA = auto() #Center of the Brillouin Zone
@@ -122,7 +416,7 @@ class SymmetryCombination(object):
         return 2*np.pi/n_ops
 
     def apply_symmetry_operators(self, points, values=None):
-        points = np.atleast_2d(points)
+        points = np.array(np.atleast_2d(points), dtype=float, copy=True)
         for i_sym, symmetry in enumerate(self.stack + [1.]):
             if i_sym == 0:
                 outputs = symmetry.apply_symmetry_operators(points, values=values)
@@ -442,12 +736,12 @@ class Translation(Symmetry):
 
     def apply_symmetry_operators(self, points, n:int|tuple=2, return_orders=False, values=None):
         operators = []
-        if isinstance(n, int):
+        if isinstance(n, (int, np.integer)):
             range1 = np.arange(-n+1,n,1)
             range2 = np.arange(-n+1,n,1)
         elif isinstance(n, tuple):
             element1 = n[0]
-            if isinstance(element1, int):
+            if isinstance(element1, (int, np.integer)):
                 range1 = np.arange(-n[0]+1,n[0],1)
                 range2 = np.arange(-n[1]+1,n[1],1)
             else:
@@ -458,7 +752,7 @@ class Translation(Symmetry):
         new_points = []
         points = np.atleast_2d(points)
         for row in range(points.shape[0]):
-            point = points[row, :]
+            point = np.array(points[row, :], copy=True)
             point[2] = 1.0
             for n1 in range1:
                 for n2 in range2:
@@ -470,7 +764,7 @@ class Translation(Symmetry):
             new_values = np.repeat(values, int(new_points.size/point.size), axis=0)
             return_list += [new_values]
         if return_orders is True:
-            N1, N2 = np.meshgrid(range1, range2)
+            N1, N2 = np.meshgrid(range1, range2, indexing="ij")
             return_list += [N1.flatten(), N2.flatten()]
         if len(return_list) == 1:
             return return_list[0]

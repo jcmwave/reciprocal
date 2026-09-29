@@ -58,6 +58,18 @@ def test_set_symmetry_after_applying_lattice(example_lattice):
     assert kspace_obj.symmetry_cone is not None
 
 
+def test_convert_to_kvectors_respects_explicit_refractive_index():
+    wavelength = 2 * np.pi
+    space = kspace.KSpace(wavelength, fermi_radius=2.0)
+
+    explicit = space.convert_to_kvectors(np.array([[0.0, 0.0]]), n=3.0)
+    inferred = space.convert_to_kvectors(np.array([[0.0, 0.0]]))
+
+    assert explicit.n[0] == pytest.approx(3.0)
+    assert explicit.kz[0] == pytest.approx(3.0)
+    assert inferred.n[0] == pytest.approx(2.0)
+
+
 @pytest.mark.parametrize(
     "kwargs,message",
     [

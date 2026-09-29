@@ -4,9 +4,9 @@ from reciprocal.utils import (lies_on_vertex, lies_on_poly,
                               order_lexicographically)
 from reciprocal.symmetry import Symmetry, SpecialPoint, PointSymmetry, symmetry_from_type
 from reciprocal.numerics import DEFAULT_TOLERANCES
+from reciprocal.cells.geometry import contains_points, distance_to_boundary
+from reciprocal.cells.model import PolygonDomain
 
-from shapely.geometry.point import Point
-from shapely.geometry.polygon import LinearRing, Polygon
 from collections import OrderedDict
 
 
@@ -273,7 +273,10 @@ class UnitCell():
             special_points[SpecialPoint.X] = 0.5*vec1
             special_points[SpecialPoint.M] = 0.5*(vec1+vec2)
             special_points[SpecialPoint.Y] = 0.5*vec2
-        elif self.lattice.bravais is BravaisLattice.OBLIQUE:
+        elif self.lattice.bravais in (
+            BravaisLattice.OBLIQUE,
+            BravaisLattice.CENTERED_RECTANGULAR,
+        ):
             if self.wigner_seitz:
                 special_points[SpecialPoint.X] = 0.5*vec1
                 special_points[SpecialPoint.H1] = self.vertices[0]
@@ -288,8 +291,6 @@ class UnitCell():
                 special_points[SpecialPoint.Y1] = 0.5*vec2
                 special_points[SpecialPoint.Y2] = -0.5*vec2
                 special_points[SpecialPoint.H2] = 0.5*(vec1-vec2)
-        elif self.lattice.bravais is BravaisLattice.CENTERED_RECTANGULAR:
-            pass
         else:
             raise ValueError("bravais lattice {}".format(self.lattice.bravais)+
                              " invalid")
@@ -299,13 +300,9 @@ class UnitCell():
     def crop_to_bz(self, points, return_indices=False):
         vertices = self.vertices[:,:2]
         norm = np.amax(np.linalg.norm(vertices, axis=1))
-        poly = Polygon(vertices).buffer(norm*1e-8)
-        keep = np.zeros(points.shape[0], dtype=bool)
-        for row in range(points.shape[0]):
-            point = points[row, :2]
-            p = Point(point)
-            if p.intersects(poly):
-                keep[row] = True
+        poly = PolygonDomain(vertices)
+        keep = contains_points(poly, points)
+        keep |= distance_to_boundary(poly, points) <= norm * 1e-8
         cropped_points = points[keep]
         if return_indices:
             return cropped_points, keep
@@ -315,13 +312,9 @@ class UnitCell():
     def crop_to_ibz(self, points, return_indices=False, tol=1e-8):
         vertices = self.irreducible[:,:2]
         norm = np.amax(np.linalg.norm(vertices, axis=1))
-        poly = Polygon(vertices).buffer(norm*tol)
-        keep = np.zeros(points.shape[0], dtype=bool)
-        for row in range(points.shape[0]):
-            point = points[row, :2]
-            p = Point(point)
-            if p.intersects(poly):
-                keep[row] = True
+        poly = PolygonDomain(vertices)
+        keep = contains_points(poly, points)
+        keep |= distance_to_boundary(poly, points) <= norm * tol
         cropped_points = points[keep]
         if return_indices:
             return cropped_points, keep
@@ -383,7 +376,6 @@ class UnitCell():
             return self._sample_no_symmetry(constraint, center)
 
     def _sample_no_symmetry(self, constraint, center):
-        unit_cell_exterior = LinearRing(self.vertices[:, :2])
         n_grid_points = self._npoints_from_constraint(constraint)
         if n_grid_points[0] == 1:
             vec1 = np.array([0.0, 0.0, 0.0])
@@ -552,14 +544,12 @@ class UnitCell():
         return area
 
     def lies_on_ibz(self, point):
-        p = Point(point).buffer(1e-9)
-        irreducible_bz = LinearRing(self.irreducible[:,:2])
-        return p.intersects(irreducible_bz)
+        irreducible_bz = PolygonDomain(self.irreducible[:,:2])
+        return bool(distance_to_boundary(irreducible_bz, point)[0] <= 1e-9)
 
     def lies_on_bz(self, point):
-        p = Point(point).buffer(1e-8)
-        bz = LinearRing(self.vertices[:,:2])
-        return p.intersects(bz)
+        bz = PolygonDomain(self.vertices[:,:2])
+        return bool(distance_to_boundary(bz, point)[0] <= 1e-8)
 
     def sample_irreducible(self, constraint = None, center = np.array([0., 0.])):
         """
@@ -612,12 +602,11 @@ class UnitCell():
         return all_points, all_weights, int_element, all_sym_ops
 
     def weight_and_sym_sample(self, points):
-        irreducible_bz = LinearRing(self.irreducible[:, :2])
-        bz = LinearRing(self.vertices[:, :2])
+        irreducible_bz = PolygonDomain(self.irreducible[:, :2])
+        bz = PolygonDomain(self.vertices[:, :2])
 
-        bbox = bz.bounds
-
-        representative_lengths = np.array([bbox[2]-bbox[0], bbox[3]-bbox[1]])
+        vertices = bz.vertices[:, :2]
+        representative_lengths = np.ptp(vertices, axis=0)
         representative_length = np.min(representative_lengths)
         special_points = list(self.special_points.keys())
         special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
@@ -627,15 +616,14 @@ class UnitCell():
 
         for row in range(points.shape[0]):
             trial_point = points[row, :2]
-            p = Point(trial_point).buffer(np.mean(representative_length)*1e-9)
             on_vertex, special_point = lies_on_vertex(trial_point,
                                                        self.special_points)
             if on_vertex:
                 if special_point is not SpecialPoint.Y2:
                     ipoly_samp[special_point].append(trial_point)
-            elif p.intersects(bz):
+            elif distance_to_boundary(bz, trial_point)[0] <= representative_length * 1e-9:
                 ipoly_samp[SpecialPoint.EXTERIOR].append(trial_point)
-            elif p.intersects(irreducible_bz):
+            elif distance_to_boundary(irreducible_bz, trial_point)[0] <= representative_length * 1e-9:
                 ipoly_samp[SpecialPoint.AXIS].append(trial_point)
             else:
                 ipoly_samp[SpecialPoint.INTERIOR].append(trial_point)
@@ -745,6 +733,7 @@ class UnitCell():
         symmetries = {BravaisLattice.HEXAGONAL:d6,
                       BravaisLattice.SQUARE:d4,
                       BravaisLattice.RECTANGULAR:d2,
+                      BravaisLattice.CENTERED_RECTANGULAR:c2,
                       BravaisLattice.OBLIQUE:c2}
 
 
@@ -816,10 +805,15 @@ class UnitCell():
         symmetry_regions = {}
         special_points = list(self.special_points.keys())
         special_points += [SpecialPoint.AXIS, SpecialPoint.EXTERIOR, SpecialPoint.INTERIOR]
+        lookup_bravais = (
+            BravaisLattice.OBLIQUE
+            if self.lattice.bravais is BravaisLattice.CENTERED_RECTANGULAR
+            else self.lattice.bravais
+        )
         for s_point in special_points:
-            if self.lattice.bravais not in symmetries[s_point]:
+            if lookup_bravais not in symmetries[s_point]:
                 continue
-            symmetry_regions[s_point] = symmetries[s_point][self.lattice.bravais]
+            symmetry_regions[s_point] = symmetries[s_point][lookup_bravais]
         return symmetry_regions
 
     def translational_symmetry(self):
