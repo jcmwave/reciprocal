@@ -1,5 +1,5 @@
-Minimal Bloch solver families in the symmetry sector
-=====================================================
+Symmetry-expanded azimuthal vector families
+============================================
 
 Oblique
 -------
@@ -13,8 +13,12 @@ Oblique
    from matplotlib.ticker import FixedLocator, FuncFormatter, MaxNLocator
 
    from reciprocal import KSpace, Lattice
-   from reciprocal.canvas import Canvas
-   from reciprocal.spectrum import PointCounts
+   from reciprocal.canvas import Canvas, choose_color
+   from reciprocal.spectrum import (
+       AxialVectorRepresentation,
+       IdentityTranslation,
+       PointCounts,
+   )
 
 
    def scale_reciprocal_axes(ax, lattice):
@@ -41,8 +45,6 @@ Oblique
            np.linalg.norm(plan.target.points, axis=1)
        )
 
-       # Merge source samples if the expansion identifies them as members of
-       # the same combined point-symmetry and reciprocal-translation orbit.
        parents = list(range(len(plan.representatives.points)))
 
        def find(source_index):
@@ -63,8 +65,6 @@ Oblique
            for source_index in source_indices[1:]:
                union(source_indices[0], source_index)
 
-       # First form point-group orbits from the complete, already deduplicated
-       # point-symmetry and reciprocal-translation expansion.
        sector_candidates = {}
        for target_index, point in enumerate(plan.target.points):
            orbit_key = tuple(sorted(
@@ -78,8 +78,6 @@ Oblique
            if plan.zone.irreducible_domain.contains(point * sector_scale)[0]:
                sector_candidates[orbit_key].append(target_index)
 
-       # Select one canonical-sector member per point-group orbit, but retain
-       # its original irreducible source orbit as the solver-family identity.
        families_by_source = {}
        for candidates in sector_candidates.values():
            if not candidates:
@@ -103,7 +101,41 @@ Oblique
        }
 
 
-   def draw_families(a, b, angle):
+   def azimuthal_vector(point):
+       radius = np.linalg.norm(point)
+       if radius == 0.0:
+           return np.zeros(3)
+       return np.array([-point[1] / radius, point[0] / radius, 0.0])
+
+
+   def expand_vector_families(plan, families, reciprocal_scale):
+       # The prescribed counterclockwise azimuthal field transforms as
+       # det(R) R v: the determinant compensates for reflection handedness.
+       representation = AxialVectorRepresentation(IdentityTranslation())
+       expanded = {}
+       for family_index, members in sorted(families.items()):
+           targets = {}
+           for source in members:
+               vector = azimuthal_vector(source)
+               for operation in plan.zone.point_group:
+                   target = operation.apply(source)[:2]
+                   transformed = representation.transform(
+                       vector,
+                       operation,
+                       source,
+                       target,
+                       (0, 0),
+                   )
+                   key = tuple(np.round(target / reciprocal_scale, decimals=12))
+                   targets.setdefault(key, (target, transformed[:2]))
+           expanded[family_index] = (
+               np.vstack([item[0] for item in targets.values()]),
+               np.vstack([item[1] for item in targets.values()]),
+           )
+       return expanded
+
+
+   def draw_vector_families(a, b, angle):
        direct_lattice = Lattice.from_lengths_angle(a, b, angle)
        lattice = direct_lattice.make_reciprocal()
        zone = lattice.brillouin_zone
@@ -114,6 +146,12 @@ Oblique
            source="ibz",
            target="propagating_spectrum",
            constraint=PointCounts(5),
+       )
+       solver_families = symmetry_sector_families(plan)
+       vector_families = expand_vector_families(
+           plan,
+           solver_families,
+           reciprocal_scale,
        )
        tessellation_orders = np.array([
            (i, j) for i in range(-5, 6) for j in range(-5, 6)
@@ -147,18 +185,23 @@ Oblique
            edgecolor="black",
            linewidth=2.0,
        )
-       families = symmetry_sector_families(plan)
-       artists = canvas.plot_bloch_families(families)
-       for artist, (family_index, members) in zip(
-           artists,
-           sorted(families.items()),
+
+       arrow_length = 0.195 * reciprocal_scale
+       for color_index, (_family_index, (points, vectors)) in enumerate(
+           sorted(vector_families.items())
        ):
-           artist.set_label(f"Family {family_index + 1}: {len(members)} members")
-       ax.legend(
-           title="Bloch families",
-           loc="center left",
-           bbox_to_anchor=(1.02, 0.5),
-       )
+           ax.quiver(
+               points[:, 0],
+               points[:, 1],
+               arrow_length * vectors[:, 0],
+               arrow_length * vectors[:, 1],
+               color=choose_color(color_index, len(vector_families)).ravel(),
+               angles="xy",
+               scale_units="xy",
+               scale=1.0,
+               width=0.004,
+               zorder=5,
+           )
 
        margin = 0.08 * k0
        ax.set_xlim(-k0 - margin, k0 + margin)
@@ -168,7 +211,7 @@ Oblique
        return fig
 
 
-   draw_families(1000.0, 500.0, 75.0)
+   draw_vector_families(1000.0, 500.0, 75.0)
 
 Rectangular
 -----------
@@ -177,7 +220,7 @@ Rectangular
    :context: close-figs
    :include-source:
 
-   draw_families(1000.0, 500.0, 90.0)
+   draw_vector_families(1000.0, 500.0, 90.0)
 
 Centered rectangular
 --------------------
@@ -186,7 +229,7 @@ Centered rectangular
    :context: close-figs
    :include-source:
 
-   draw_families(500.0, 500.0, 70.0)
+   draw_vector_families(500.0, 500.0, 70.0)
 
 Square
 ------
@@ -195,7 +238,7 @@ Square
    :context: close-figs
    :include-source:
 
-   draw_families(500.0, 500.0, 90.0)
+   draw_vector_families(500.0, 500.0, 90.0)
 
 Hexagonal
 ---------
@@ -204,4 +247,4 @@ Hexagonal
    :context: close-figs
    :include-source:
 
-   draw_families(500.0, 500.0, 60.0)
+   draw_vector_families(500.0, 500.0, 60.0)

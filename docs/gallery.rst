@@ -13,3 +13,4 @@ Gallery
    gallery/high_symmetry_paths
    gallery/propagating_bloch_families
    gallery/symmetry_expanded_bloch_families
+   gallery/symmetry_expanded_vector_families
