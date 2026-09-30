@@ -25,6 +25,19 @@ from .symmetry import SpecialPoint as SpecialPoint
 from .symmetry import Symmetry as Symmetry
 from .symmetry import SymmetryCombination as SymmetryCombination
 from .unit_cell import UnitCell as UnitCell
+from .zone_sampling import BoundaryGrid as BoundaryGrid
+from .zone_sampling import CanonicalPlacementError as CanonicalPlacementError
+from .zone_sampling import GridSymmetry as GridSymmetry
+from .zone_sampling import IncompatibleGridSymmetryError as IncompatibleGridSymmetryError
+from .zone_sampling import RepresentativeMap as RepresentativeMap
+from .zone_sampling import RepresentativePlacement as RepresentativePlacement
+from .zone_sampling import ZoneGrid as ZoneGrid
+from .zone_sampling import ZoneReduction as ZoneReduction
+from .zone_sampling import ZoneRegion as ZoneRegion
+from .zone_sampling import ZoneSamplingError as ZoneSamplingError
+from .zone_sampling import grid_symmetry as grid_symmetry
+from .zone_sampling import reduce_brillouin_zone as reduce_brillouin_zone
+from .zone_sampling import sample_brillouin_zone as sample_brillouin_zone
 
 __version__: str
 __all__: list[str]

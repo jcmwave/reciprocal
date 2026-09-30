@@ -113,6 +113,7 @@ class MeshReduction:
     representative_indices: IntArray
     degeneracies: IntArray
     operations: tuple[PointOperation, ...]
+    placement: object | None = None
 
     def __post_init__(self) -> None:
         mapping = np.asarray(self.full_to_irreducible)
@@ -124,7 +125,10 @@ class MeshReduction:
             raise ValueError("representative_indices has the wrong length")
         if degeneracies.shape != representatives.shape:
             raise ValueError("degeneracies has the wrong length")
-        if not all(np.issubdtype(item.dtype, np.integer) for item in (mapping, representatives, degeneracies)):
+        if not all(
+            np.issubdtype(item.dtype, np.integer)
+            for item in (mapping, representatives, degeneracies)
+        ):
             raise TypeError("mesh-reduction index arrays must contain integers")
         if np.any(mapping < 0) or np.any(mapping >= len(representatives)):
             raise ValueError("full_to_irreducible contains an invalid index")
@@ -132,12 +136,40 @@ class MeshReduction:
             raise ValueError("representative_indices contains an invalid index")
         if np.any(degeneracies <= 0) or int(np.sum(degeneracies)) != len(self.full.points):
             raise ValueError("degeneracies must be positive and sum to the full mesh size")
+        if not np.array_equal(
+            np.bincount(mapping, minlength=len(representatives)), degeneracies
+        ):
+            raise ValueError("degeneracies must equal the full-to-irreducible counts")
+        expected_weights = np.bincount(
+            mapping,
+            weights=self.full.normalized_weights,
+            minlength=len(representatives),
+        )
+        if not np.allclose(
+            expected_weights,
+            self.irreducible.normalized_weights,
+            rtol=1e-10,
+            atol=1e-12,
+        ):
+            raise ValueError("irreducible weights must equal the summed full-mesh weights")
         if not self.operations:
             raise ValueError("mesh reduction requires a nonempty preserving subgroup")
         object.__setattr__(self, "full_to_irreducible", _readonly(mapping, np.int64))
         object.__setattr__(self, "representative_indices", _readonly(representatives, np.int64))
         object.__setattr__(self, "degeneracies", _readonly(degeneracies, np.int64))
         object.__setattr__(self, "operations", tuple(self.operations))
+
+    @property
+    def reduced(self) -> SamplingResult:
+        """Common-interface name for the irreducible sampling."""
+
+        return self.irreducible
+
+    @property
+    def full_to_reduced(self) -> IntArray:
+        """Common-interface name for the full-to-irreducible mapping."""
+
+        return self.full_to_irreducible
 
 
 def _fractional_grid(grid: MonkhorstPackGrid) -> tuple[np.ndarray, np.ndarray]:
@@ -156,7 +188,10 @@ def _fractional_grid(grid: MonkhorstPackGrid) -> tuple[np.ndarray, np.ndarray]:
     return indices, fractional
 
 
-def _representatives_in_zone(keys: np.ndarray, zone: BrillouinZone) -> tuple[np.ndarray, np.ndarray]:
+def _representatives_in_zone(
+    keys: np.ndarray,
+    zone: BrillouinZone,
+) -> tuple[np.ndarray, np.ndarray]:
     basis = zone.cell.basis[:, :2]
     fractional = []
     cartesian = []
@@ -207,13 +242,18 @@ def _key(value: np.ndarray, decimals: int) -> tuple[float, float]:
     return float(rounded[0]), float(rounded[1])
 
 
-def reduce_monkhorst_pack(
+def _mesh_preserving_actions(
     zone: BrillouinZone,
     grid: MonkhorstPackGrid,
     *,
     tolerances: Tolerances = DEFAULT_TOLERANCES,
-) -> MeshReduction:
-    """Reduce a uniform mesh by the point operations that preserve it."""
+) -> tuple[
+    SamplingResult,
+    MonkhorstPackMetadata,
+    tuple[PointOperation, ...],
+    tuple[np.ndarray, ...],
+]:
+    """Return a full mesh and the point operations that permute it."""
 
     if not isinstance(tolerances, Tolerances):
         raise TypeError("tolerances must be a Tolerances instance")
@@ -242,6 +282,23 @@ def reduce_monkhorst_pack(
             permutations.append(permutation)
     if not operations:
         raise RuntimeError("mesh-preserving subgroup is empty")
+    return full, full_metadata, tuple(operations), tuple(permutations)
+
+
+def _reduce_monkhorst_pack(
+    zone: BrillouinZone,
+    grid: MonkhorstPackGrid,
+    *,
+    tolerances: Tolerances = DEFAULT_TOLERANCES,
+) -> MeshReduction:
+    """Reduce a uniform mesh by the point operations that preserve it."""
+
+    full, full_metadata, operations, permutations = _mesh_preserving_actions(
+        zone,
+        grid,
+        tolerances=tolerances,
+    )
+    keys = full_metadata.canonical_keys
 
     unassigned = set(range(len(keys)))
     orbits: list[list[int]] = []
@@ -293,8 +350,21 @@ def reduce_monkhorst_pack(
         mapping,
         representative_indices,
         degeneracies,
-        tuple(operations),
+        operations,
     )
+
+
+def reduce_monkhorst_pack(
+    zone: BrillouinZone,
+    grid: MonkhorstPackGrid,
+    *,
+    tolerances: Tolerances = DEFAULT_TOLERANCES,
+) -> MeshReduction:
+    """Reduce a Monkhorst--Pack mesh through the common zone interface."""
+
+    from reciprocal.zone_sampling import reduce_brillouin_zone
+
+    return reduce_brillouin_zone(zone, grid, tolerances=tolerances)
 
 
 def sample_monkhorst_pack(
@@ -304,13 +374,14 @@ def sample_monkhorst_pack(
     irreducible: bool = False,
     tolerances: Tolerances = DEFAULT_TOLERANCES,
 ) -> SamplingResult:
-    """Sample a full or point-group-reduced uniform reciprocal mesh."""
+    """Sample a full or point-group-reduced mesh through the common interface."""
 
     if not isinstance(irreducible, bool):
         raise TypeError("irreducible must be a bool")
-    if irreducible:
-        return reduce_monkhorst_pack(zone, grid, tolerances=tolerances).irreducible
-    return _full_mesh(zone, grid)
+    from reciprocal.zone_sampling import ZoneRegion, sample_brillouin_zone
+
+    region = ZoneRegion.IRREDUCIBLE if irreducible else ZoneRegion.BZ
+    return sample_brillouin_zone(zone, grid, region=region, tolerances=tolerances)
 
 
 __all__ = [

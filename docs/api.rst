@@ -19,6 +19,14 @@ Common sampling contract
    :undoc-members:
    :show-inheritance:
 
+Brillouin-zone sampling
+-----------------------
+
+.. automodule:: reciprocal.zone_sampling
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Reciprocal meshes and paths
 ---------------------------
 

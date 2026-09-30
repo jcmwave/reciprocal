@@ -23,6 +23,21 @@ from .reciprocal_mesh import (
 from .sampling import MaxSpacing, PointCounts, SamplingDomain, SamplingResult
 from .symmetry import PointSymmetry, SpecialPoint, Symmetry, SymmetryCombination
 from .unit_cell import UnitCell
+from .zone_sampling import (
+    BoundaryGrid,
+    CanonicalPlacementError,
+    GridSymmetry,
+    IncompatibleGridSymmetryError,
+    RepresentativeMap,
+    RepresentativePlacement,
+    ZoneGrid,
+    ZoneReduction,
+    ZoneRegion,
+    ZoneSamplingError,
+    grid_symmetry,
+    reduce_brillouin_zone,
+    sample_brillouin_zone,
+)
 
 try:
     __version__ = version("reciprocal")
@@ -31,11 +46,15 @@ except PackageNotFoundError:  # Source checkout used without installation.
 
 __all__ = [
     "BlochFamily",
+    "BoundaryGrid",
     "BravaisLattice",
     "BrillouinZone",
+    "CanonicalPlacementError",
     "DEFAULT_TOLERANCES",
     "GridCentering",
+    "GridSymmetry",
     "HighSymmetryPath",
+    "IncompatibleGridSymmetryError",
     "KSpace",
     "KVector",
     "KVectorGroup",
@@ -46,6 +65,8 @@ __all__ = [
     "MonkhorstPackGrid",
     "PointCounts",
     "PointSymmetry",
+    "RepresentativeMap",
+    "RepresentativePlacement",
     "SpecialPoint",
     "Symmetry",
     "SymmetryCombination",
@@ -53,9 +74,16 @@ __all__ = [
     "SamplingResult",
     "Tolerances",
     "UnitCell",
+    "ZoneGrid",
+    "ZoneReduction",
+    "ZoneRegion",
+    "ZoneSamplingError",
     "__version__",
     "make_high_symmetry_path",
+    "grid_symmetry",
+    "reduce_brillouin_zone",
     "reduce_monkhorst_pack",
     "sample_monkhorst_pack",
+    "sample_brillouin_zone",
     "set_band_path_axis",
 ]

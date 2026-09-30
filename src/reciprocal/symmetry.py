@@ -272,6 +272,11 @@ def point_orbit_with_operations(
     for operation in operations:
         transformed = operation.fractional @ coordinate
         canonical = transformed - np.floor(transformed + 0.5)
+        half_boundary = np.isclose(
+            np.abs(canonical), 0.5, rtol=0.0, atol=tolerance
+        )
+        canonical[half_boundary] = -0.5
+        canonical[np.isclose(canonical, 0.0, rtol=0.0, atol=tolerance)] = 0.0
         matches = [
             index
             for index, existing in enumerate(fractional_members)

@@ -83,10 +83,10 @@ the subgroup of point operations that preserves the configured shift:
 
 .. code-block:: python
 
-   from reciprocal import MonkhorstPackGrid, reduce_monkhorst_pack
+   from reciprocal import MonkhorstPackGrid, reduce_brillouin_zone
 
    mesh = MonkhorstPackGrid((8, 8), shift=(0.5, 0.5))
-   reduction = reduce_monkhorst_pack(zone, mesh)
+   reduction = reduce_brillouin_zone(zone, mesh)
 
    full_mesh = reduction.full
    irreducible_mesh = reduction.irreducible

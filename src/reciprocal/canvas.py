@@ -37,13 +37,28 @@ from reciprocal.spectrum import (
 from reciprocal.symmetry import SpecialPoint
 
 
+_OKABE_ITO = mpl.colors.ListedColormap(
+    [
+        "#000000",
+        "#E69F00",
+        "#56B4E9",
+        "#009E73",
+        "#F0E442",
+        "#0072B2",
+        "#D55E00",
+        "#CC79A7",
+    ],
+    name="okabe_ito",
+)
+
+
 def choose_color(item: int, n_items: int) -> np.ndarray:
     """Return a deterministic RGBA color for an item in a collection."""
 
     if n_items <= 0:
         raise ValueError("n_items must be positive")
-    if n_items <= 10:
-        color_map, count = mpl.colormaps["tab10"], 10.0
+    if n_items <= 8:
+        color_map, count = _OKABE_ITO, 8.0
     elif n_items <= 20:
         color_map, count = mpl.colormaps["tab20"], 20.0
     else:

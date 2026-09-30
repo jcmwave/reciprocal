@@ -106,10 +106,64 @@ class BrillouinZone:
         return self.cell.max_extent
 
 
+class ReciprocalVectors(Protocol):
+    @property
+    def basis(self) -> FloatArray: ...
+
+    def reciprocal_vectors(self) -> ReciprocalVectors: ...
+
+
 class ReciprocalLattice(Protocol):
     lattice_type: str
     bravais: BravaisLattice
-    vectors: object
+    vectors: ReciprocalVectors
+
+
+def _fractional_in_cell(cartesian: FloatArray, cell: UnitCell) -> FloatArray:
+    """Express a Cartesian point in the Wigner-Seitz cell basis."""
+    fractional = np.asarray(cartesian, dtype=float) @ np.linalg.inv(cell.basis[:, :2])
+    nearest_half = np.rint(2.0 * fractional) / 2.0
+    scale = np.maximum(1.0, np.abs(fractional))
+    snap = np.abs(fractional - nearest_half) <= np.finfo(float).eps * scale * 128
+    return np.where(snap, nearest_half, fractional)
+
+
+def _canonical_high_symmetry_geometry(
+    lattice: ReciprocalLattice,
+    cell: UnitCell,
+) -> tuple[dict[str, FloatArray], tuple[str, ...]] | None:
+    """Return basis-oriented special points and an IBZ boundary when defined.
+
+    Square and hexagonal lattices have several symmetry-equivalent irreducible
+    chambers. Anchor their conventional chamber to the original lattice basis,
+    rather than the reordered and sign-normalized Wigner-Seitz cell basis.
+    """
+    reciprocal_basis = np.asarray(lattice.vectors.basis, dtype=float)[:, :2]
+    gamma = np.zeros(2)
+    if lattice.bravais is BravaisLattice.SQUARE:
+        first, second = reciprocal_basis
+        points = {
+            "Γ": gamma,
+            "X": 0.5 * first,
+            "M": 0.5 * (first + second),
+        }
+        return points, ("Γ", "X", "M")
+    if lattice.bravais is not BravaisLattice.HEXAGONAL:
+        return None
+
+    direct_basis = lattice.vectors.reciprocal_vectors().basis[:, :2]
+    first_direction = direct_basis[0] / np.linalg.norm(direct_basis[0])
+    second_direction = direct_basis[1] / np.linalg.norm(direct_basis[1])
+    vertices = cell.vertices[:, :2]
+    k_index = int(np.argmax(vertices @ first_direction))
+    k_point = vertices[k_index]
+    neighbors = vertices[
+        np.array([(k_index - 1) % len(vertices), (k_index + 1) % len(vertices)])
+    ]
+    upper_neighbor = neighbors[int(np.argmax(neighbors @ second_direction))]
+    m_point = 0.5 * (k_point + upper_neighbor)
+    points = {"Γ": gamma, "M": m_point, "K": k_point}
+    return points, ("Γ", "K", "M")
 
 
 def _clip_origin_half_plane(vertices: FloatArray, normal: FloatArray) -> FloatArray:
@@ -134,11 +188,17 @@ def _clip_origin_half_plane(vertices: FloatArray, normal: FloatArray) -> FloatAr
     return array[keep]
 
 
+def _canonical_chamber_direction(cell: UnitCell) -> FloatArray:
+    """Return the interior direction used to select the generic IBZ chamber."""
+
+    basis = cell.basis[:, :2].T
+    return basis @ np.array([1.0, np.sqrt(2.0) / 5.0])
+
+
 def _irreducible_domain(cell: UnitCell, operations: tuple[PointOperation, ...]) -> PolygonDomain:
     # A generic direction has a trivial stabilizer. Its Dirichlet chamber under
     # the finite point group occupies exactly one group-order fraction.
-    basis = cell.basis[:, :2].T
-    direction = basis @ np.array([1.0, np.sqrt(2.0) / 5.0])
+    direction = _canonical_chamber_direction(cell)
     vertices = cell.vertices.copy()
     identity = np.eye(2)
     for operation in operations:
@@ -212,6 +272,43 @@ def _special_point(
     return SpecialKPoint(label, representative, cartesian, stabilizer, orbit)
 
 
+def _vertex_representative_in_ibz(
+    point: SpecialKPoint,
+    cell: UnitCell,
+    irreducible: PolygonDomain,
+    tolerance: float,
+) -> FloatArray:
+    """Choose the member of a vertex orbit on the canonical IBZ side."""
+
+    candidates = []
+    for vertex in cell.vertices[:, :2]:
+        cartesian = np.array([vertex[0], vertex[1], 0.0])
+        if not contains_points(irreducible, [cartesian])[0]:
+            continue
+        if any(
+            equivalent_mod_lattice(
+                cartesian,
+                orbit_member,
+                cell.basis,
+                tolerance=tolerance,
+            )
+            for orbit_member in point.orbit
+        ):
+            candidates.append(vertex)
+    if not candidates:
+        raise RuntimeError("vertex orbit does not intersect the canonical IBZ")
+    direction = _canonical_chamber_direction(cell)
+    selected = max(
+        candidates,
+        key=lambda candidate: (
+            float(np.dot(candidate, direction)),
+            float(candidate[0]),
+            float(candidate[1]),
+        ),
+    )
+    return selected @ np.linalg.inv(cell.basis[:, :2])
+
+
 def make_brillouin_zone(
     lattice: ReciprocalLattice, *, tolerances: Tolerances = DEFAULT_TOLERANCES
 ) -> BrillouinZone:
@@ -225,8 +322,29 @@ def make_brillouin_zone(
     )
     operations = group.operations
     points: dict[str, SpecialKPoint] = {}
-    for label, fractional in _label_coordinates(lattice.bravais, cell.basis).items():
-        points[label] = _special_point(label, fractional, cell, operations, tolerances.relative)
+    canonical_geometry = _canonical_high_symmetry_geometry(lattice, cell)
+    if canonical_geometry is None:
+        for label, fractional in _label_coordinates(lattice.bravais, cell.basis).items():
+            points[label] = _special_point(
+                label, fractional, cell, operations, tolerances.relative
+            )
+    else:
+        cartesian_points, _boundary = canonical_geometry
+        for label, cartesian in cartesian_points.items():
+            points[label] = _special_point(
+                label,
+                _fractional_in_cell(cartesian, cell),
+                cell,
+                operations,
+                tolerances.relative,
+            )
+    if canonical_geometry is None:
+        irreducible = _irreducible_domain(cell, operations)
+    else:
+        cartesian_points, boundary = canonical_geometry
+        irreducible = PolygonDomain(
+            np.vstack([cartesian_points[label] for label in boundary])
+        )
     # Low-symmetry Wigner-Seitz vertices are path-defining points even when
     # their little group is trivial. Add one deterministic label per orbit.
     if lattice.bravais in (BravaisLattice.OBLIQUE, BravaisLattice.CENTERED_RECTANGULAR):
@@ -250,16 +368,26 @@ def make_brillouin_zone(
                 for orbit_member in existing.orbit
             ):
                 continue
+            fractional = _vertex_representative_in_ibz(
+                candidate,
+                cell,
+                irreducible,
+                tolerances.relative,
+            )
             label = f"H{len(vertex_points) + 1}"
             point = _special_point(label, fractional, cell, operations, tolerances.relative)
             vertex_points.append(point)
             points[label] = point
-    irreducible = _irreducible_domain(cell, operations)
     return BrillouinZone(cell, irreducible, points, operations, lattice.bravais)
 
 
 class BrillouinZoneSampler:
-    """Sample a full Brillouin zone or one irreducible point-group chamber."""
+    """Compatibility facade for boundary-aware BZ sampling.
+
+    New code may use :func:`reciprocal.sample_brillouin_zone` with a
+    :class:`reciprocal.BoundaryGrid` to select the grid, region, and
+    representative placement explicitly.
+    """
 
     def __init__(self, cell_sampler: CellSampler | None = None) -> None:
         self.cell_sampler = CellSampler() if cell_sampler is None else cell_sampler
@@ -270,13 +398,12 @@ class BrillouinZoneSampler:
         constraint: SamplingConstraint | None = None,
         center: NDArray[np.float64] | None = None,
     ) -> SamplingResult:
-        sample = self.cell_sampler.sample(zone.cell, constraint, center)
-        return SamplingResult(
-            sample.points,
-            sample.weights,
-            sample.integration_element,
-            sample.domain,
-            metadata={"symmetry_operations": zone.point_group},
+        from reciprocal.zone_sampling import _boundary_grid, _sample_boundary_full
+
+        return _sample_boundary_full(
+            zone,
+            _boundary_grid(constraint, center),
+            self.cell_sampler,
         )
 
     def sample_irreducible(
@@ -285,28 +412,15 @@ class BrillouinZoneSampler:
         constraint: SamplingConstraint | None = None,
         center: NDArray[np.float64] | None = None,
     ) -> SamplingResult:
-        full = self.cell_sampler.sample(zone.cell, constraint, center)
-        mask = contains_points(zone.irreducible_domain, full.points)
-        points = full.points[mask]
-        if len(points) == 0:
-            raise ValueError("sampling constraint produced no points in the irreducible domain")
-        multiplicities = np.asarray(
-            [len(point_orbit(point, zone.cell.basis, zone.point_group)) for point in points],
-            dtype=float,
+        from reciprocal.zone_sampling import (
+            _boundary_grid,
+            _place_in_canonical_ibz,
+            _reduce_boundary,
         )
-        raw_weights = full.weights[mask] * multiplicities
-        weights = raw_weights / np.sum(raw_weights)
-        return SamplingResult(
-            points,
-            weights,
-            zone.area,
-            zone.cell.domain,
-            metadata={
-                "coordinate_domain": zone.irreducible_domain,
-                "symmetry_operations": zone.point_group,
-                "source_region": "ibz",
-            },
-        )
+
+        grid = _boundary_grid(constraint, center)
+        reduction = _reduce_boundary(zone, grid, DEFAULT_TOLERANCES, self.cell_sampler)
+        return _place_in_canonical_ibz(reduction, zone, grid).reduced
 
 
 __all__ = [

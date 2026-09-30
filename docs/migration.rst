@@ -66,3 +66,25 @@ Band paths are not area quadratures and intentionally use
 :class:`reciprocal.HighSymmetryPath`. It carries ordered coordinates,
 cumulative distance, node indices, labels, and segment boundaries without
 inventing meaningless two-dimensional integration weights.
+
+Common zone sampling
+--------------------
+
+New code can select boundary-aware or Monkhorst--Pack grids through one
+interface:
+
+.. code-block:: python
+
+   from reciprocal import BoundaryGrid, PointCounts, sample_brillouin_zone
+
+   full = sample_brillouin_zone(zone, BoundaryGrid(PointCounts(15)))
+   reduced = sample_brillouin_zone(
+       zone,
+       BoundaryGrid(PointCounts(15)),
+       region="irreducible",
+   )
+
+``BrillouinZoneSampler``, ``sample_monkhorst_pack()``, and
+``reduce_monkhorst_pack()`` remain compatibility facades during 1.x. Use
+:func:`reciprocal.reduce_brillouin_zone` when full-to-reduced mappings or
+canonical representative-placement provenance are required.

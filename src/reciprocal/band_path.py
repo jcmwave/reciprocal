@@ -17,9 +17,9 @@ IntArray = NDArray[np.int64]
 DEFAULT_PATHS: dict[BravaisLattice, tuple[str, ...]] = {
     BravaisLattice.SQUARE: ("Γ", "X", "M", "Γ"),
     BravaisLattice.RECTANGULAR: ("Γ", "X", "S", "Y", "Γ"),
-    BravaisLattice.CENTERED_RECTANGULAR: ("Γ", "X", "S", "Y", "Γ"),
+    BravaisLattice.CENTERED_RECTANGULAR: ("Γ", "X", "H1", "S", "Γ"),
     BravaisLattice.HEXAGONAL: ("Γ", "M", "K", "Γ"),
-    BravaisLattice.OBLIQUE: ("Γ", "X", "C", "Y", "Γ"),
+    BravaisLattice.OBLIQUE: ("Γ", "X", "H1", "Y", "C", "Γ"),
 }
 
 

@@ -16,7 +16,12 @@ class MonkhorstPackGrid:
     shape: tuple[int, int]
     centering: GridCentering
     shift: tuple[float, float]
-    def __init__(self, shape: tuple[int, int], centering: GridCentering | str = ..., shift: tuple[float, float] = ...) -> None: ...
+    def __init__(
+        self,
+        shape: tuple[int, int],
+        centering: GridCentering | str = ...,
+        shift: tuple[float, float] = ...,
+    ) -> None: ...
 
 class MonkhorstPackMetadata:
     grid: MonkhorstPackGrid
@@ -32,6 +37,22 @@ class MeshReduction:
     representative_indices: NDArray[np.int64]
     degeneracies: NDArray[np.int64]
     operations: tuple[PointOperation, ...]
+    placement: object | None
+    @property
+    def reduced(self) -> SamplingResult: ...
+    @property
+    def full_to_reduced(self) -> NDArray[np.int64]: ...
 
-def reduce_monkhorst_pack(zone: BrillouinZone, grid: MonkhorstPackGrid, *, tolerances: Tolerances = ...) -> MeshReduction: ...
-def sample_monkhorst_pack(zone: BrillouinZone, grid: MonkhorstPackGrid, *, irreducible: bool = ..., tolerances: Tolerances = ...) -> SamplingResult: ...
+def reduce_monkhorst_pack(
+    zone: BrillouinZone,
+    grid: MonkhorstPackGrid,
+    *,
+    tolerances: Tolerances = ...,
+) -> MeshReduction: ...
+def sample_monkhorst_pack(
+    zone: BrillouinZone,
+    grid: MonkhorstPackGrid,
+    *,
+    irreducible: bool = ...,
+    tolerances: Tolerances = ...,
+) -> SamplingResult: ...

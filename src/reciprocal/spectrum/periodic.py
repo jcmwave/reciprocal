@@ -8,10 +8,11 @@ from typing import Any
 import numpy as np
 from scipy.spatial import cKDTree
 
-from reciprocal.brillouin_zone import BrillouinZone, BrillouinZoneSampler
+from reciprocal.brillouin_zone import BrillouinZone
 from reciprocal.lattice import Lattice
 from reciprocal.numerics import DEFAULT_TOLERANCES, Tolerances
 from reciprocal.symmetry import PointOperation
+from reciprocal.zone_sampling import ZoneRegion, _boundary_grid, sample_brillouin_zone
 
 from .domains import EvanescentDisk, KDomain, PropagationDisk, brillouin_zone_domain
 from .model import (
@@ -20,7 +21,6 @@ from .model import (
     SamplingConstraint,
     SourceRegion,
     TargetRegion,
-    legacy_constraint,
 )
 from .sampling import voronoi_physical_weights
 
@@ -309,14 +309,17 @@ def _representatives(
     source_region: SourceRegion,
     constraint: SamplingConstraint,
 ) -> KSampling:
-    sampler = BrillouinZoneSampler()
-    converted = legacy_constraint(constraint)
     if source_region is SourceRegion.IBZ:
-        sampled = sampler.sample_irreducible(zone, converted)
+        region = ZoneRegion.IRREDUCIBLE
     elif source_region is SourceRegion.BZ:
-        sampled = sampler.sample_full(zone, converted)
+        region = ZoneRegion.BZ
     else:
         raise ValueError("periodic plans require BZ or IBZ representatives")
+    sampled = sample_brillouin_zone(
+        zone,
+        _boundary_grid(constraint, None),
+        region=region,
+    )
     # IBZ weights are orbit-weighted and integrate over the full BZ. The BZ is
     # consequently the numerical integration domain even though representative
     # coordinates occupy its irreducible chamber.
