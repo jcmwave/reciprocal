@@ -88,3 +88,19 @@ interface:
 ``reduce_monkhorst_pack()`` remain compatibility facades during 1.x. Use
 :func:`reciprocal.reduce_brillouin_zone` when full-to-reduced mappings or
 canonical representative-placement provenance are required.
+
+Spectrum extensions
+-------------------
+
+See :doc:`spectrum_workflows` for shared 1D/2D count and maximum-spacing
+constraints, typed Wood-anomaly circles and arc-length sampling, and
+non-periodic content symmetry. Use ``content_symmetry`` and
+``symmetry_cone`` on ``sample_domain()`` or ``sample_pupil()`` to obtain
+solver representatives; the attached ``symmetry_reduction`` expands
+``FieldSamples`` over the complete physical target.
+
+``CurveSamplingResult`` describes 1D edge quadrature and is deliberately
+separate from the area-based ``SamplingResult``. ``WoodAnomalyCircle``
+centers are ``-G`` for the diffraction-order convention
+``k_diffracted = k_incident + G``. ``Canvas.plot_wood_anomalies()`` replaces
+hand-built circles in the gallery.

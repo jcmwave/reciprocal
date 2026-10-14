@@ -17,6 +17,7 @@ the inverse unit and include the :math:`2\pi` convention.
    installation
    quickstart
    zone_sampling
+   spectrum_workflows
    migration
    plotting
    gallery

@@ -14,3 +14,5 @@ Gallery
    gallery/propagating_bloch_families
    gallery/symmetry_expanded_bloch_families
    gallery/symmetry_expanded_vector_families
+   gallery/non_periodic_sampling
+   gallery/wood_anomalies
