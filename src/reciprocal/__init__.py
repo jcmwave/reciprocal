@@ -9,6 +9,12 @@ from importlib.metadata import PackageNotFoundError, version
 from .band_path import HighSymmetryPath, make_high_symmetry_path, set_band_path_axis
 from .bravais import BravaisLattice
 from .brillouin_zone import BrillouinZone
+from .integration_cells import (
+    CartesianIntegrationCell,
+    CircularIntegrationCell,
+    IntegrationCell,
+    PolarIntegrationCell,
+)
 from .kspace import KSpace
 from .kvector import BlochFamily, KVector, KVectorGroup
 from .lattice import Lattice, LatticeVectors
@@ -50,11 +56,14 @@ __all__ = [
     "BravaisLattice",
     "BrillouinZone",
     "CanonicalPlacementError",
+    "CartesianIntegrationCell",
+    "CircularIntegrationCell",
     "DEFAULT_TOLERANCES",
     "GridCentering",
     "GridSymmetry",
     "HighSymmetryPath",
     "IncompatibleGridSymmetryError",
+    "IntegrationCell",
     "KSpace",
     "KVector",
     "KVectorGroup",
@@ -65,6 +74,7 @@ __all__ = [
     "MonkhorstPackGrid",
     "PointCounts",
     "PointSymmetry",
+    "PolarIntegrationCell",
     "RepresentativeMap",
     "RepresentativePlacement",
     "SpecialPoint",

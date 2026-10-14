@@ -22,6 +22,7 @@ from .integration import (
 from .interpolation import InterpolationResult, interpolate
 from .model import (
     CartesianGrid,
+    CircularGrid,
     FieldSamples,
     KSampling,
     MaxSpacing,
@@ -47,16 +48,18 @@ from .representations import (
     IdentityTranslation,
     PolarVectorRepresentation,
     RejectTranslations,
-    SPPolarizationRepresentation,
     ScalarRepresentation,
+    SPPolarizationRepresentation,
     TensorRepresentation,
     TranslationAction,
 )
-from .sampling import NonPeriodicSampler
+from .sampling import NonPeriodicSampler, resolve_sampling_grid
 
 __all__ = [
+    "resolve_sampling_grid",
     "AxialVectorRepresentation",
     "CartesianGrid",
+    "CircularGrid",
     "ComplexScalarRepresentation",
     "EvanescentDisk",
     "ExpansionGenerator",

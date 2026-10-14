@@ -145,9 +145,7 @@ class PupilDomain:
     def contains(self, points: ArrayLike) -> BoolArray:
         radius = np.linalg.norm(_points(points) - np.asarray(self.center), axis=1)
         tolerance = np.finfo(float).eps * self.outer_radius * 64
-        return (radius >= self.inner_radius - tolerance) & (
-            radius <= self.outer_radius + tolerance
-        )
+        return (radius >= self.inner_radius - tolerance) & (radius <= self.outer_radius + tolerance)
 
     def bounds(self) -> tuple[float, float, float, float]:
         x, y = self.center
@@ -193,16 +191,21 @@ def _cross(first: FloatArray, second: FloatArray) -> float:
 def _segment_circle_parameters(first: FloatArray, second: FloatArray, radius: float) -> list[float]:
     direction = second - first
     a = float(np.dot(direction, direction))
-    b = 2.0 * float(np.dot(first, direction))
-    c = float(np.dot(first, first) - radius * radius)
-    discriminant = b * b - 4.0 * a * c
     parameters = [0.0, 1.0]
-    if discriminant > 0.0 and a > 0.0:
-        root = np.sqrt(discriminant)
-        for value in ((-b - root) / (2.0 * a), (-b + root) / (2.0 * a)):
-            if 0.0 < value < 1.0:
-                parameters.append(float(value))
-    return sorted(parameters)
+    if a > 0.0:
+        projection = -float(np.dot(first, direction)) / a
+        closest = first + projection * direction
+        distance_squared = float(np.dot(closest, closest))
+        difference = radius * radius - distance_squared
+        tolerance = np.finfo(float).eps * max(radius * radius, distance_squared) * 64
+        # Split tangent edges too. Computing the closest point avoids the
+        # cancellation in the quadratic discriminant near tangency.
+        if difference >= -tolerance:
+            root = 0.0 if abs(difference) <= tolerance else np.sqrt(difference / a)
+            for value in (projection - root, projection + root):
+                if 0.0 < value < 1.0:
+                    parameters.append(float(value))
+    return sorted(set(parameters))
 
 
 def _disk_polygon_area(disk: PropagationDisk, polygon: PolygonDomain) -> float:
@@ -246,14 +249,10 @@ def intersection_area(domain: KDomain, polygon: PolygonDomain) -> float:
     if disk is not None:
         return _disk_polygon_area(disk, polygon)
     if isinstance(domain, PupilDomain):
-        outer = _disk_polygon_area(
-            PropagationDisk(domain.outer_radius, domain.center), polygon
-        )
+        outer = _disk_polygon_area(PropagationDisk(domain.outer_radius, domain.center), polygon)
         if domain.inner_radius == 0.0:
             return outer
-        inner = _disk_polygon_area(
-            PropagationDisk(domain.inner_radius, domain.center), polygon
-        )
+        inner = _disk_polygon_area(PropagationDisk(domain.inner_radius, domain.center), polygon)
         return max(0.0, outer - inner)
     if isinstance(domain, PolygonKDomain):
         try:

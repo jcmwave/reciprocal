@@ -3,6 +3,10 @@ from .band_path import make_high_symmetry_path as make_high_symmetry_path
 from .band_path import set_band_path_axis as set_band_path_axis
 from .bravais import BravaisLattice as BravaisLattice
 from .brillouin_zone import BrillouinZone as BrillouinZone
+from .integration_cells import CartesianIntegrationCell as CartesianIntegrationCell
+from .integration_cells import CircularIntegrationCell as CircularIntegrationCell
+from .integration_cells import IntegrationCell as IntegrationCell
+from .integration_cells import PolarIntegrationCell as PolarIntegrationCell
 from .kspace import KSpace as KSpace
 from .kvector import BlochFamily as BlochFamily
 from .kvector import KVector as KVector
@@ -20,6 +24,7 @@ from .sampling import MaxSpacing as MaxSpacing
 from .sampling import PointCounts as PointCounts
 from .sampling import SamplingDomain as SamplingDomain
 from .sampling import SamplingResult as SamplingResult
+from .sampling import resolve_point_counts as resolve_point_counts
 from .symmetry import PointSymmetry as PointSymmetry
 from .symmetry import SpecialPoint as SpecialPoint
 from .symmetry import Symmetry as Symmetry
@@ -41,5 +46,3 @@ from .zone_sampling import sample_brillouin_zone as sample_brillouin_zone
 
 __version__: str
 __all__: list[str]
-
-from .sampling import resolve_point_counts as resolve_point_counts

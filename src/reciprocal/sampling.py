@@ -9,6 +9,13 @@ from typing import Any, Mapping, Protocol, TypeAlias, runtime_checkable
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from .integration_cells import (
+    CartesianIntegrationCell,
+    CircularIntegrationCell,
+    IntegrationCell,
+    PolarIntegrationCell,
+)
+
 FloatArray = NDArray[np.float64]
 ComplexArray = NDArray[np.complex128]
 IntArray = NDArray[np.int64]
@@ -25,6 +32,8 @@ class SamplingDomain(Protocol):
     def contains(self, points: ArrayLike) -> BoolArray: ...
 
     def bounds(self) -> tuple[float, float, float, float]: ...
+
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +191,8 @@ class SamplingResult:
 
     ``normalized_weights`` sum to one. ``physical_weights`` therefore sum to
     ``integration_element``, which is the physical area of ``domain``.
+    Optional ``integration_cells`` retain cell geometry and effective
+    quadrature areas in point order, without storing plotting artists.
     """
 
     points: FloatArray
@@ -191,6 +202,7 @@ class SamplingResult:
     point_ids: IntArray | None = None
     kz: ComplexArray | None = None
     metadata: Mapping[str, object] = field(default_factory=dict)
+    integration_cells: tuple[IntegrationCell, ...] | None = None
 
     def __post_init__(self) -> None:
         points = np.asarray(self.points, dtype=float)
@@ -224,8 +236,10 @@ class SamplingResult:
         if not np.isclose(integration_element, self.domain.area, rtol=1e-9, atol=1e-14):
             raise ValueError("integration_element must equal the declared domain area")
 
-        ids = np.arange(len(points), dtype=np.int64) if self.point_ids is None else np.asarray(
-            self.point_ids
+        ids = (
+            np.arange(len(points), dtype=np.int64)
+            if self.point_ids is None
+            else np.asarray(self.point_ids)
         )
         if ids.shape != (len(points),) or not np.issubdtype(ids.dtype, np.integer):
             raise ValueError("point_ids must have shape (N,) and integer dtype")
@@ -242,6 +256,28 @@ class SamplingResult:
         object.__setattr__(self, "integration_element", integration_element)
         object.__setattr__(self, "point_ids", _readonly(ids, np.int64))
         object.__setattr__(self, "kz", None if kz is None else _readonly(kz, complex))
+        if self.integration_cells is not None:
+            cells = tuple(self.integration_cells)
+            if len(cells) != len(points) or not all(
+                isinstance(
+                    cell,
+                    (
+                        CartesianIntegrationCell,
+                        CircularIntegrationCell,
+                        PolarIntegrationCell,
+                                        ),
+                )
+                for cell in cells
+            ):
+                raise ValueError("integration_cells must contain one cell per point")
+            if not np.allclose(
+                [cell.area for cell in cells],
+                weights * integration_element,
+                rtol=1e-9,
+                atol=np.finfo(float).eps * integration_element * 256,
+            ):
+                raise ValueError("integration cell areas must match physical_weights")
+            object.__setattr__(self, "integration_cells", cells)
         object.__setattr__(
             self,
             "metadata",
@@ -300,6 +336,7 @@ class SamplingResult:
             self.point_ids,
             kz,
             self.metadata,
+            self.integration_cells,
         )
 
     def to_kvectors(self, wavelength: float, refractive_index: float, direction: int = 1):

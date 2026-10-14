@@ -6,6 +6,13 @@ import numpy as np
 from scipy.spatial import Delaunay, QhullError
 
 from reciprocal.cells.model import PolygonDomain
+from reciprocal.integration_cells import (
+    CartesianIntegrationCell,
+    CircularIntegrationCell,
+    IntegrationCell,
+    PolarIntegrationCell,
+)
+from reciprocal.sampling import MaxSpacing, normalize_constraint, resolve_point_counts
 
 from .domains import (
     EvanescentDisk,
@@ -14,42 +21,14 @@ from .domains import (
     PupilDomain,
     intersection_area,
 )
-from .model import CartesianGrid, KSampling, PointCounts, PolarGrid, SamplingConstraint
-
-
-def _cell_polygon(x0: float, x1: float, y0: float, y1: float) -> PolygonDomain:
-    return PolygonDomain(
-        np.array(
-            [
-                [x0, y0, 0.0],
-                [x1, y0, 0.0],
-                [x1, y1, 0.0],
-                [x0, y1, 0.0],
-            ]
-        )
-    )
-
-
-def _representative(domain: KDomain, bounds: tuple[float, float, float, float]) -> np.ndarray:
-    x0, x1, y0, y1 = bounds
-    center = np.array([(x0 + x1) * 0.5, (y0 + y1) * 0.5])
-    if domain.contains(center)[0]:
-        return center
-    # Boundary cells need a point inside both the cell and domain.  A small,
-    # deterministic tensor search is sufficient because cells with zero-area
-    # intersections have already been removed.
-    coordinates = np.linspace(0.05, 0.95, 19)
-    candidates = np.array(
-        [
-            [x0 + tx * (x1 - x0), y0 + ty * (y1 - y0)]
-            for tx in coordinates
-            for ty in coordinates
-        ]
-    )
-    inside = candidates[domain.contains(candidates)]
-    if len(inside):
-        return inside[np.argmin(np.linalg.norm(inside - center, axis=1))]
-    raise RuntimeError("could not place a representative in a positive-area boundary cell")
+from .model import (
+    CartesianGrid,
+    CircularGrid,
+    KSampling,
+    PointCounts,
+    PolarGrid,
+    SamplingConstraint,
+)
 
 
 def _clip_half_plane(
@@ -134,46 +113,154 @@ class NonPeriodicSampler:
     def sample(
         self,
         domain: KDomain,
-        grid: CartesianGrid | PolarGrid | PointCounts = CartesianGrid((16, 16)),
+        grid: CartesianGrid | CircularGrid | PolarGrid | PointCounts | str = CartesianGrid((16, 16)),
+        *,
+        include_cells: bool = False,
+        constraint: SamplingConstraint = None,
     ) -> KSampling:
+        if isinstance(grid, str):
+            grid = resolve_sampling_grid(domain, grid, constraint)
+        elif constraint is not None:
+            raise ValueError("constraint cannot accompany an explicitly resolved grid")
         if isinstance(grid, PointCounts):
             grid = CartesianGrid((grid.first, grid.second))
         if isinstance(grid, CartesianGrid):
-            return self.sample_cartesian(domain, grid)
+            return self.sample_cartesian(domain, grid, include_cells=include_cells)
+        if isinstance(grid, CircularGrid):
+            return self.sample_circular(domain, grid, include_cells=include_cells)
         if isinstance(grid, PolarGrid):
-            return self.sample_polar(domain, grid)
-        raise TypeError("grid must be CartesianGrid, PolarGrid, or PointCounts")
+            return self.sample_polar(domain, grid, include_cells=include_cells)
+        raise TypeError("grid must be CartesianGrid, CircularGrid, PolarGrid, or PointCounts")
 
-    def sample_cartesian(self, domain: KDomain, grid: CartesianGrid) -> KSampling:
+    def sample_cartesian(
+        self, domain: KDomain, grid: CartesianGrid, *, include_cells: bool = False
+    ) -> KSampling:
+        """Mask a fixed Cartesian grid to the domain and give its points equal weights.
+
+        Points stay at the centers of equally spaced bounding-box rectangles.
+        Retained cell footprints are full rectangles, including at boundaries;
+        each cell's effective quadrature area is ``domain.area / N``.
+        """
         x_min, x_max, y_min, y_max = domain.bounds()
         x_edges = np.linspace(x_min, x_max, grid.shape[0] + 1)
         y_edges = np.linspace(y_min, y_max, grid.shape[1] + 1)
-        points: list[np.ndarray] = []
-        areas: list[float] = []
-        area_threshold = np.finfo(float).eps * domain.area * 256
-        for first in range(grid.shape[0]):
-            for second in range(grid.shape[1]):
-                bounds = (
-                    float(x_edges[first]),
-                    float(x_edges[first + 1]),
-                    float(y_edges[second]),
-                    float(y_edges[second + 1]),
-                )
-                cell = _cell_polygon(*bounds)
-                area = intersection_area(domain, cell)
-                if area <= area_threshold:
-                    continue
-                points.append(_representative(domain, bounds))
-                areas.append(area)
-        if not points:
+        x_centers = 0.5 * (x_edges[:-1] + x_edges[1:])
+        y_centers = 0.5 * (y_edges[:-1] + y_edges[1:])
+        mesh = np.meshgrid(x_centers, y_centers, indexing="ij")
+        candidates = np.column_stack((mesh[0].ravel(), mesh[1].ravel()))
+        keep = domain.contains(candidates)
+        points = candidates[keep]
+        if len(points) == 0:
             raise ValueError("grid produced no points in the domain")
-        raw = np.asarray(areas, dtype=float)
-        # The cells tile the bounding box. Renormalization only removes
-        # floating-point accumulation error in analytic clipping.
-        weights = raw / np.sum(raw)
-        return KSampling(np.vstack(points), weights, domain.area, domain)
+        weights = np.full(len(points), 1.0 / len(points))
+        cells = None
+        if include_cells:
+            cells = tuple(
+                CartesianIntegrationCell(
+                    (
+                        float(x_edges[first]),
+                        float(x_edges[first + 1]),
+                        float(y_edges[second]),
+                        float(y_edges[second + 1]),
+                    ),
+                    domain,
+                    domain.area / len(points),
+                )
+                for first, second in zip(*np.nonzero(keep.reshape(grid.shape)))
+            )
+        return KSampling(
+            points,
+            weights,
+            domain.area,
+            domain,
+            integration_cells=cells,
+        )
 
-    def sample_polar(self, domain: KDomain, grid: PolarGrid) -> KSampling:
+    def sample_circular(
+        self,
+        domain: KDomain,
+        grid: CircularGrid,
+        *,
+        include_cells: bool = False,
+        angular_multiple: int = 1,
+        angular_offset: float = 0.0,
+    ) -> KSampling:
+        """Sample the origin and rings with comparable radial and arc spacing.
+
+        Requires an origin-centered disk so the circular center cell and
+        annular wedges partition the integration domain exactly.
+        """
+        if isinstance(domain, PropagationDisk):
+            outer = domain.radius
+        elif isinstance(domain, EvanescentDisk):
+            outer = domain.max_parallel_wavevector
+        elif isinstance(domain, PupilDomain) and domain.inner_radius == 0.0:
+            outer = domain.outer_radius
+        else:
+            raise ValueError("CircularGrid requires an origin-centered disk domain")
+        if domain.center != (0.0, 0.0):
+            raise ValueError("CircularGrid requires an origin-centered disk domain")
+
+        spacing = outer / (grid.radial - 0.5)
+        center_radius = spacing * 0.5
+        points = [np.zeros(2)]
+        areas = [np.pi * center_radius**2]
+        cells: list[IntegrationCell] = []
+        if include_cells:
+            cells.append(CircularIntegrationCell(center_radius))
+        for ring in range(1, grid.radial):
+            radius = ring * spacing
+            if grid.max_azimuthal_spacing is not None:
+                count = max(
+                    angular_multiple,
+                    int(np.ceil(2 * np.pi * radius / grid.max_azimuthal_spacing / angular_multiple))
+                    * angular_multiple,
+                )
+            else:
+                nominal = (
+                    (grid.azimuthal * ring / (grid.radial - 1))
+                    if grid.azimuthal is not None
+                    else 2 * np.pi * ring
+                )
+                count = max(
+                    angular_multiple,
+                    int(np.floor(nominal / angular_multiple + 0.5)) * angular_multiple,
+                )
+            angle_spacing = 2.0 * np.pi / count
+            angles = np.arange(count) * angle_spacing + angular_offset
+            inner = (ring - 0.5) * spacing
+            upper = min((ring + 0.5) * spacing, outer)
+            points.extend(np.column_stack((radius * np.cos(angles), radius * np.sin(angles))))
+            area = 0.5 * (upper**2 - inner**2) * angle_spacing
+            areas.extend([area] * count)
+            if include_cells:
+                cells.extend(
+                    PolarIntegrationCell(
+                        (0.0, 0.0),
+                        inner,
+                        upper,
+                        angle - angle_spacing * 0.5,
+                        angle + angle_spacing * 0.5,
+                    )
+                    for angle in angles
+                )
+        raw = np.asarray(areas)
+        return KSampling(
+            np.vstack(points),
+            raw / np.sum(raw),
+            domain.area,
+            domain,
+            integration_cells=tuple(cells) if include_cells else None,
+        )
+
+    def sample_polar(
+        self,
+        domain: KDomain,
+        grid: PolarGrid,
+        *,
+        include_cells: bool = False,
+        angular_offset: float = 0.0,
+    ) -> KSampling:
         if isinstance(domain, PropagationDisk):
             inner, outer, center = 0.0, domain.radius, domain.center
         elif isinstance(domain, EvanescentDisk):
@@ -183,12 +270,17 @@ class NonPeriodicSampler:
         else:
             # Polar cells are only exact for radial domains. Preserve a useful
             # deterministic fallback for arbitrary domain implementations.
-            return self.sample_cartesian(domain, CartesianGrid((grid.radial * 2, grid.radial * 2)))
+            return self.sample_cartesian(
+                domain,
+                CartesianGrid((grid.radial * 2, grid.radial * 2)),
+                include_cells=include_cells,
+            )
 
         radial_squared = np.linspace(inner**2, outer**2, grid.radial + 1)
-        angular_edges = np.linspace(0.0, 2.0 * np.pi, grid.azimuthal + 1)
+        angular_edges = np.linspace(0.0, 2.0 * np.pi, grid.azimuthal + 1) + angular_offset
         points = []
         areas = []
+        cells = []
         center_array = np.asarray(center)
         for radial_index in range(grid.radial):
             lower_squared = radial_squared[radial_index]
@@ -200,8 +292,20 @@ class NonPeriodicSampler:
                 angle = 0.5 * (lower + upper)
                 points.append(center_array + radius * np.array([np.cos(angle), np.sin(angle)]))
                 areas.append(0.5 * (upper_squared - lower_squared) * (upper - lower))
+                if include_cells:
+                    cells.append(
+                        PolarIntegrationCell(
+                            center, np.sqrt(lower_squared), np.sqrt(upper_squared), lower, upper
+                        )
+                    )
         raw = np.asarray(areas)
-        return KSampling(np.vstack(points), raw / np.sum(raw), domain.area, domain)
+        return KSampling(
+            np.vstack(points),
+            raw / np.sum(raw),
+            domain.area,
+            domain,
+            integration_cells=tuple(cells) if include_cells else None,
+        )
 
 
 def grid_from_constraint(
@@ -209,37 +313,56 @@ def grid_from_constraint(
 ) -> CartesianGrid:
     """Convert a typed or legacy resolution constraint to a Cartesian grid."""
 
-    if constraint is None:
-        return CartesianGrid((default, default))
-    if isinstance(constraint, PointCounts):
-        return CartesianGrid((constraint.first, constraint.second))
     if isinstance(constraint, CartesianGrid):
         return constraint
-    if isinstance(constraint, dict):
-        kind = constraint.get("type")
-        value = constraint.get("value")
-        if kind == "n_points":
-            values = np.asarray(value)
-            if values.ndim == 0:
-                return CartesianGrid((int(values), int(values)))
-            if values.shape == (2,):
-                return CartesianGrid((int(values[0]), int(values[1])))
-        if kind == "max_length":
-            spacing = float(value)
-            if not np.isfinite(spacing) or spacing <= 0.0:
-                raise ValueError("max_length must be finite and positive")
-            bounds = domain.bounds()
-            return CartesianGrid(
-                (
-                    max(1, int(np.ceil((bounds[1] - bounds[0]) / spacing))),
-                    max(1, int(np.ceil((bounds[3] - bounds[2]) / spacing))),
-                )
-            )
-    from .model import MaxSpacing
-
-    if isinstance(constraint, MaxSpacing):
-        return grid_from_constraint(domain, constraint.as_legacy(), default=default)
-    raise ValueError("unsupported sampling constraint")
+    return resolve_sampling_grid(
+        domain, "cartesian", normalize_constraint(constraint, default=default)
+    )
 
 
-__all__ = ["NonPeriodicSampler", "grid_from_constraint", "voronoi_physical_weights"]
+def resolve_sampling_grid(domain: KDomain, scheme: str, constraint: SamplingConstraint = None):
+    """Construct a spectrum grid from common physical spacing/count constraints."""
+    if scheme not in ("cartesian", "circular", "polar"):
+        raise ValueError("scheme must be cartesian, circular, or polar")
+    typed = normalize_constraint(constraint, default=5 if scheme == "circular" else 16)
+    x0, x1, y0, y1 = domain.bounds()
+    if scheme == "cartesian":
+        return CartesianGrid(resolve_point_counts((x1 - x0, y1 - y0), typed))
+    if isinstance(domain, PropagationDisk):
+        inner, outer = 0.0, domain.radius
+    elif isinstance(domain, EvanescentDisk):
+        inner, outer = 0.0, domain.max_parallel_wavevector
+    elif isinstance(domain, PupilDomain):
+        inner, outer = domain.inner_radius, domain.outer_radius
+    else:
+        raise ValueError("radial constraints require a disk or annular domain")
+    values = typed.values
+    if scheme == "circular":
+        if inner != 0:
+            raise ValueError("CircularGrid requires a complete disk")
+        if isinstance(typed, PointCounts):
+            return CircularGrid(typed.first, None if typed.dimensions == 1 else typed.second)
+        radial_max = values[0]
+        radial = max(1, int(np.ceil(outer / radial_max + 0.5)))
+        angular_max = values[-1]
+        return CircularGrid(radial, max_azimuthal_spacing=angular_max)
+    if scheme == "polar":
+        if isinstance(typed, PointCounts):
+            return PolarGrid(typed.first, typed.second)
+        # Equal-area radial bands: their largest width occurs at the inner edge.
+        radial = max(
+            1, int(np.ceil((outer**2 - inner**2) / (values[0] ** 2 + 2 * inner * values[0])))
+        )
+        angular = resolve_point_counts(
+            2 * np.pi * outer, MaxSpacing(values[-1]), placement="closed"
+        )[0]
+        return PolarGrid(radial, angular)
+    raise ValueError("scheme must be cartesian, circular, or polar")
+
+
+__all__ = [
+    "NonPeriodicSampler",
+    "grid_from_constraint",
+    "resolve_sampling_grid",
+    "voronoi_physical_weights",
+]

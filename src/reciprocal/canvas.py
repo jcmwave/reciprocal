@@ -11,13 +11,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
 from matplotlib.collections import PatchCollection
-from matplotlib.patches import Circle, Polygon, Wedge
+from matplotlib.patches import Circle, Patch, Polygon, Rectangle, Wedge
 from numpy.typing import ArrayLike
 
 from reciprocal.brillouin_zone import BrillouinZone
 from reciprocal.band_path import HighSymmetryPath
 from reciprocal.cells.model import PolygonDomain, SamplingResult, UnitCell
 from reciprocal.kspace import KSpace
+from reciprocal.integration_cells import CartesianIntegrationCell, CircularIntegrationCell
 from reciprocal.kvector import KVectorGroup
 from reciprocal.lattice import Lattice, LatticeVectors
 from reciprocal.spectrum import (
@@ -106,6 +107,8 @@ def _sampling_weights(value: object, *, physical: bool) -> np.ndarray | None:
     if isinstance(value, ExpansionMap):
         value = value.target
     if isinstance(value, KSampling):
+        return value.physical_weights if physical else value.normalized_weights
+    if isinstance(value):
         return value.physical_weights if physical else value.normalized_weights
     if isinstance(value, SamplingResult):
         return value.weights * value.integration_element if physical else value.weights
@@ -442,6 +445,43 @@ class Canvas:
             verticalalignment="center",
             clip_on=True,
         )
+
+
+    def plot_integration_cells(self, sampling: SamplingResult, **kwargs: Any) -> tuple[Patch, ...]:
+        """Add one patch per retained integration cell, in sampling-point order.
+
+        Request ``include_cells=True`` when sampling. Cartesian patches show
+        full grid rectangles; circular center cells are circles and ring
+        cells are annular wedges. Every
+        call creates fresh artists that can be styled independently.
+        """
+        if not isinstance(sampling, SamplingResult):
+            raise TypeError("plot_integration_cells expects a SamplingResult")
+        if sampling.integration_cells is None:
+            raise ValueError("sampling has no integration cells; sample with include_cells=True")
+        style = {"facecolor": "none", "edgecolor": "gray", "linewidth": 0.5}
+        style.update(kwargs)
+        artists = []
+        for cell in sampling.integration_cells:
+            if isinstance(cell, CartesianIntegrationCell):
+                x0, x1, y0, y1 = cell.bounds
+                artist = Rectangle((x0, y0), x1 - x0, y1 - y0, **style)
+            elif isinstance(cell, CircularIntegrationCell):
+                artist = Circle(cell.center, radius=cell.radius, **style)
+            else:
+                artist = Wedge(
+                    cell.center, cell.outer_radius,
+                    np.degrees(cell.theta_start), np.degrees(cell.theta_end),
+                    width=cell.outer_radius - cell.inner_radius, **style,
+                )
+            artists.append(artist)
+        # Construct all patches before changing the axes, so unsupported
+        # geometry cannot leave a partially drawn sampling behind.
+        for artist in artists:
+            self.ax.add_patch(artist)
+        bounds = sampling.domain.bounds()
+        self.update_bbox([[bounds[0], bounds[2]], [bounds[1], bounds[3]]])
+        return tuple(artists)
 
     def plot_domain(self, domain: object, **kwargs: Any):
         if isinstance(domain, (PropagationDisk, EvanescentDisk, PupilDomain)):

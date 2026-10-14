@@ -42,6 +42,12 @@ class TargetRegion(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class CartesianGrid:
+    """Fixed bounding-box grid of cell centers, masked to the domain.
+
+    ``shape`` sets the number of positions along x and y before masking.
+    Every retained point receives the same normalized weight.
+    """
+
     shape: tuple[int, int]
 
     def __post_init__(self) -> None:
@@ -51,6 +57,40 @@ class CartesianGrid:
         if tuple(self.shape) != shape or any(value <= 0 for value in shape):
             raise ValueError("CartesianGrid shape must contain two positive integers")
         object.__setattr__(self, "shape", shape)
+
+
+@dataclass(frozen=True, slots=True)
+class CircularGrid:
+    """An origin point and uniformly spaced concentric sampling rings.
+
+    ``radial`` counts the center plus the nonzero-radius rings. For disk
+    radius R, their spacing is R / (radial - 0.5). Each ring chooses its
+    azimuthal point count to keep arc spacing close to radial spacing.
+    """
+
+    radial: int = 5
+    azimuthal: int | None = None
+    max_azimuthal_spacing: float | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.radial, bool):
+            raise TypeError("CircularGrid radial count must be an integer")
+        if not np.isfinite(self.radial) or self.radial <= 0 or int(self.radial) != self.radial:
+            raise ValueError("CircularGrid radial count must be a positive integer")
+        object.__setattr__(self, "radial", int(self.radial))
+        if self.azimuthal is not None:
+            count = PointCounts(self.azimuthal).first
+            object.__setattr__(self, "azimuthal", count)
+            if self.radial == 1:
+                raise ValueError("azimuthal count requires at least one nonzero ring")
+        if self.max_azimuthal_spacing is not None:
+            values = MaxSpacing(self.max_azimuthal_spacing).values
+            if len(values) != 1:
+                raise ValueError("azimuthal spacing must be a scalar")
+            maximum = values[0]
+            object.__setattr__(self, "max_azimuthal_spacing", maximum)
+        if self.azimuthal is not None and self.max_azimuthal_spacing is not None:
+            raise ValueError("specify an azimuthal count or spacing, not both")
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +169,7 @@ class FieldSamples(Generic[T]):
 
 __all__ = [
     "CartesianGrid",
+    "CircularGrid",
     "FieldSamples",
     "KSampling",
     "MaxSpacing",

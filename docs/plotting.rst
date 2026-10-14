@@ -73,6 +73,57 @@ normalized weights.
    fig.colorbar(points, ax=ax, label="normalized quadrature weight")
    ax.set(xlabel=r"$k_x$", ylabel=r"$k_y$", title="Polar pupil sampling")
 
+Integration cells
+-----------------
+
+Pass ``include_cells=True`` to ``sample_domain()`` or ``sample_pupil()`` to
+retain each point's integration-cell geometry.
+``sampling.integration_cells`` is an immutable tuple in the same order as
+``sampling.points``; each cell's ``area`` matches its physical weight.
+Without this option, ``integration_cells`` is ``None``.
+
+``Canvas.plot_integration_cells()`` adds and returns one independently
+styleable Matplotlib patch per point. Cartesian grids keep fixed x and y
+spacing, remove points outside the domain, and give all retained points equal
+weights. Their patches are full grid rectangles, including where they extend
+past a domain boundary. A Cartesian cell's ``geometric_area`` is the rectangle
+area, while its ``area`` is the effective quadrature area ``domain.area / N``.
+Polar cells are annular wedges whose areas determine their weights.
+For ``CircularGrid``, the origin point has a ``Circle`` artist and the
+remaining points have ``Wedge`` artists. Its rings have fixed radial spacing
+and increasing azimuthal counts chosen to keep arc spacing close to the
+radial spacing. For example,
+``space.sample_domain(CircularGrid(radial=5), include_cells=True)`` samples
+the center and four rings; import ``CircularGrid`` from ``reciprocal.spectrum``.
+Matplotlib renders circular arcs using its usual Bezier paths. Retained
+geometry also survives ``sampling.with_kz()``.
+
+.. plot::
+   :include-source:
+
+   import matplotlib.pyplot as plt
+
+   from reciprocal import KSpace
+   from reciprocal.canvas import Canvas
+   from reciprocal.spectrum import PolarGrid
+
+   space = KSpace.propagating(wavelength=1.0)
+   sampling = space.sample_domain(
+       PolarGrid(radial=5, azimuthal=24), include_cells=True,
+   )
+   fig, ax = plt.subplots(figsize=(6, 5))
+   canvas = Canvas(ax)
+   artists = canvas.plot_integration_cells(
+       sampling, facecolor="none", edgecolor="gray", linewidth=0.5,
+   )
+   canvas.plot_point_sampling(sampling, s=12)
+   ax.set(xlabel=r"$k_x$", ylabel=r"$k_y$", title="Integration cells")
+
+Calling the cell plotter on a result without retained geometry raises a
+``ValueError`` asking you to sample with ``include_cells=True``. Sampling
+still returns a ``SamplingResult`` regardless of this option, and does not
+require Matplotlib.
+
 Periodic expansion and Bloch families
 -------------------------------------
 

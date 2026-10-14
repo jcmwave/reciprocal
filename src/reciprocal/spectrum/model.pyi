@@ -33,6 +33,12 @@ class PolarGrid:
     azimuthal: int
     def __init__(self, radial: int, azimuthal: int) -> None: ...
 
+class CircularGrid:
+    radial: int
+    azimuthal: int | None
+    max_azimuthal_spacing: float | None
+    def __init__(self, radial: int = ..., azimuthal: int | None = ..., max_azimuthal_spacing: float | None = ...) -> None: ...
+
 class ValueRepresentation(Protocol[T]):
     def transform(self, value: T, operation: object, source_k: FloatArray, target_k: FloatArray, reciprocal_order: tuple[int, int]) -> T: ...
 
