@@ -31,37 +31,121 @@ class SamplingDomain(Protocol):
 class PointCounts:
     first: int
     second: int | None = None
+    dimensions: int = field(init=False)
 
     def __post_init__(self) -> None:
+        dimensions = 1 if self.second is None else 2
         second = self.first if self.second is None else self.second
-        if isinstance(self.first, bool) or isinstance(second, bool):
+        if isinstance(self.first, (bool, np.bool_)) or isinstance(second, (bool, np.bool_)):
             raise TypeError("point counts must be integers")
-        if int(self.first) != self.first or int(second) != second:
+        if (
+            not np.all(np.isfinite([self.first, second]))
+            or int(self.first) != self.first
+            or int(second) != second
+        ):
             raise TypeError("point counts must be integers")
         if int(self.first) <= 0 or int(second) <= 0:
             raise ValueError("point counts must be positive")
         object.__setattr__(self, "first", int(self.first))
         object.__setattr__(self, "second", int(second))
+        object.__setattr__(self, "dimensions", dimensions)
+
+    @property
+    def values(self) -> tuple[int, ...]:
+        if self.dimensions == 1:
+            return (self.first,)
+        if self.second is None:
+            raise ValueError("second dimension count is missing")
+        return (self.first, self.second)
 
     def as_legacy(self) -> Mapping[str, object]:
-        return {"type": "n_points", "value": (self.first, self.second)}
+        return {
+            "type": "n_points",
+            "value": self.first if self.dimensions == 1 else (self.first, self.second),
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class MaxSpacing:
-    value: float
+    value: float | tuple[float, float]
 
     def __post_init__(self) -> None:
-        value = float(self.value)
-        if not np.isfinite(value) or value <= 0.0:
+        array = np.asarray(self.value)
+        if array.shape not in ((), (2,)) or array.dtype.kind == "b":
+            raise ValueError("maximum spacing must be a scalar or a pair")
+        array = array.astype(float)
+        if not np.all(np.isfinite(array)) or np.any(array <= 0.0):
             raise ValueError("maximum spacing must be finite and positive")
+        value = float(array) if array.ndim == 0 else (float(array[0]), float(array[1]))
         object.__setattr__(self, "value", value)
+
+    @property
+    def values(self) -> tuple[float, ...]:
+        return self.value if isinstance(self.value, tuple) else (self.value,)
 
     def as_legacy(self) -> Mapping[str, object]:
         return {"type": "max_length", "value": self.value}
 
 
 SamplingConstraint: TypeAlias = PointCounts | MaxSpacing | Mapping[str, object] | None
+
+
+def normalize_constraint(
+    constraint: SamplingConstraint, *, default: int = 16
+) -> PointCounts | MaxSpacing:
+    """Normalize typed or legacy constraints, preserving their dimensionality."""
+    if constraint is None:
+        return PointCounts(default)
+    if isinstance(constraint, (PointCounts, MaxSpacing)):
+        return constraint
+    if not isinstance(constraint, Mapping):
+        raise TypeError("constraint must be PointCounts, MaxSpacing, or a legacy mapping")
+    value = constraint.get("value")
+    if constraint.get("type") == "n_points":
+        array = np.asarray(value)
+        if array.shape == ():
+            return PointCounts(array.item())
+        if array.shape == (2,):
+            return PointCounts(array[0].item(), array[1].item())
+        raise ValueError("point counts must be a scalar or a pair")
+    if constraint.get("type") == "max_length":
+        return MaxSpacing(value)
+    raise ValueError("constraint type must be 'n_points' or 'max_length'")
+
+
+def resolve_point_counts(
+    lengths: ArrayLike,
+    constraint: SamplingConstraint = None,
+    *,
+    placement: str = "centers",
+    default: int = 16,
+) -> tuple[int, ...]:
+    """Resolve 1D/2D counts from physical extents and a common constraint.
+
+    Centers/closed curves use N intervals; endpoint-inclusive grids use N-1.
+    A scalar constraint broadcasts over two dimensions.
+    """
+    extents = np.atleast_1d(np.asarray(lengths, dtype=float))
+    if (
+        extents.ndim != 1
+        or len(extents) not in (1, 2)
+        or not np.all(np.isfinite(extents))
+        or np.any(extents <= 0)
+    ):
+        raise ValueError("lengths must contain one or two finite positive extents")
+    if placement not in ("centers", "closed", "endpoints"):
+        raise ValueError("placement must be centers, closed, or endpoints")
+    typed = normalize_constraint(constraint, default=default)
+    values = typed.values
+    if len(values) != 1 and len(values) != len(extents):
+        raise ValueError("constraint dimensions do not match the sampling dimensions")
+    values = values * len(extents) if len(values) == 1 else values
+    if isinstance(typed, PointCounts):
+        return tuple(int(value) for value in values)
+    extra = 1 if placement == "endpoints" else 0
+    return tuple(
+        max(1, int(np.ceil(length / maximum))) + extra for length, maximum in zip(extents, values)
+    )
 
 
 def legacy_constraint(constraint: SamplingConstraint) -> Mapping[str, object] | None:
@@ -238,4 +322,6 @@ __all__ = [
     "SamplingDomain",
     "SamplingResult",
     "legacy_constraint",
+    "normalize_constraint",
+    "resolve_point_counts",
 ]

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
@@ -20,7 +19,13 @@ from reciprocal.reciprocal_mesh import (
     _mesh_preserving_actions,
     _reduce_monkhorst_pack,
 )
-from reciprocal.sampling import MaxSpacing, PointCounts, SamplingConstraint, SamplingResult
+from reciprocal.sampling import (
+    MaxSpacing,
+    PointCounts,
+    SamplingConstraint,
+    SamplingResult,
+    normalize_constraint,
+)
 from reciprocal.symmetry import PointOperation
 
 FloatArray = NDArray[np.float64]
@@ -100,9 +105,7 @@ class RepresentativeMap:
         source = np.asarray(self.source_points, dtype=float)
         placed = np.asarray(self.placed_points, dtype=float)
         count = len(source_indices)
-        if source_indices.shape != (count,) or not np.issubdtype(
-            source_indices.dtype, np.integer
-        ):
+        if source_indices.shape != (count,) or not np.issubdtype(source_indices.dtype, np.integer):
             raise ValueError("source_indices must be a one-dimensional integer array")
         if len(np.unique(source_indices)) != count:
             raise ValueError("source_indices must be unique")
@@ -156,23 +159,7 @@ ZoneReduction = MeshReduction
 
 
 def _typed_constraint(constraint: SamplingConstraint | None) -> PointCounts | MaxSpacing:
-    if constraint is None:
-        return PointCounts(5)
-    if isinstance(constraint, (PointCounts, MaxSpacing)):
-        return constraint
-    if not isinstance(constraint, Mapping):
-        raise TypeError("constraint must be PointCounts, MaxSpacing, a legacy mapping, or None")
-    kind = constraint.get("type")
-    value = constraint.get("value")
-    if kind == "n_points":
-        array = np.asarray(value)
-        if array.ndim == 0:
-            return PointCounts(array.item())
-        if array.shape == (2,):
-            return PointCounts(array[0].item(), array[1].item())
-    if kind == "max_length":
-        return MaxSpacing(float(value))
-    raise ValueError("legacy constraint must specify 'n_points' or 'max_length'")
+    return normalize_constraint(constraint, default=5)
 
 
 def _boundary_grid(

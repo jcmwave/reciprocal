@@ -20,7 +20,7 @@ from .reciprocal_mesh import (
     reduce_monkhorst_pack,
     sample_monkhorst_pack,
 )
-from .sampling import MaxSpacing, PointCounts, SamplingDomain, SamplingResult
+from .sampling import MaxSpacing, PointCounts, SamplingDomain, SamplingResult, resolve_point_counts
 from .symmetry import PointSymmetry, SpecialPoint, Symmetry, SymmetryCombination
 from .unit_cell import UnitCell
 from .zone_sampling import (
@@ -72,6 +72,7 @@ __all__ = [
     "SymmetryCombination",
     "SamplingDomain",
     "SamplingResult",
+    "resolve_point_counts",
     "Tolerances",
     "UnitCell",
     "ZoneGrid",

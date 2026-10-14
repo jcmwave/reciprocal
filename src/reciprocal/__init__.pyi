@@ -41,3 +41,5 @@ from .zone_sampling import sample_brillouin_zone as sample_brillouin_zone
 
 __version__: str
 __all__: list[str]
+
+from .sampling import resolve_point_counts as resolve_point_counts

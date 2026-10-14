@@ -46,6 +46,20 @@ class MonkhorstPackGrid:
     centering: GridCentering | str = GridCentering.MONKHORST_PACK
     shift: tuple[float, float] = (0.0, 0.0)
 
+    @classmethod
+    def from_constraint(
+        cls, zone, constraint, *, centering=GridCentering.MONKHORST_PACK, shift=(0.0, 0.0)
+    ):
+        """Resolve mesh counts from physical reciprocal-basis lengths."""
+        from reciprocal.sampling import resolve_point_counts
+
+        lengths = np.linalg.norm(zone.cell.basis[:, :2], axis=1)
+        return cls(
+            resolve_point_counts(lengths, constraint, placement="closed", default=5),
+            centering,
+            shift,
+        )
+
     def __post_init__(self) -> None:
         if len(self.shape) != 2 or any(isinstance(item, bool) for item in self.shape):
             raise ValueError("shape must contain two positive integers")
@@ -78,8 +92,10 @@ class MonkhorstPackMetadata:
         indices = np.asarray(self.mesh_indices)
         fractional = np.asarray(self.fractional_points, dtype=float)
         keys = np.asarray(self.canonical_keys, dtype=float)
-        if indices.ndim != 2 or indices.shape[1] != 2 or not np.issubdtype(
-            indices.dtype, np.integer
+        if (
+            indices.ndim != 2
+            or indices.shape[1] != 2
+            or not np.issubdtype(indices.dtype, np.integer)
         ):
             raise ValueError("mesh_indices must have shape (N, 2) and integer dtype")
         if fractional.shape != indices.shape or keys.shape != indices.shape:
@@ -136,9 +152,7 @@ class MeshReduction:
             raise ValueError("representative_indices contains an invalid index")
         if np.any(degeneracies <= 0) or int(np.sum(degeneracies)) != len(self.full.points):
             raise ValueError("degeneracies must be positive and sum to the full mesh size")
-        if not np.array_equal(
-            np.bincount(mapping, minlength=len(representatives)), degeneracies
-        ):
+        if not np.array_equal(np.bincount(mapping, minlength=len(representatives)), degeneracies):
             raise ValueError("degeneracies must equal the full-to-irreducible counts")
         expected_weights = np.bincount(
             mapping,
@@ -311,9 +325,7 @@ def _reduce_monkhorst_pack(
         while len(orbit) != previous_size:
             previous_size = len(orbit)
             orbit.update(
-                int(permutation[index])
-                for permutation in permutations
-                for index in tuple(orbit)
+                int(permutation[index]) for permutation in permutations for index in tuple(orbit)
             )
         ordered = sorted(orbit)
         orbits.append(ordered)

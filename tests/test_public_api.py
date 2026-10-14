@@ -37,6 +37,7 @@ def test_documented_public_api_is_stable():
         "SpecialPoint",
         "SamplingDomain",
         "SamplingResult",
+        "resolve_point_counts",
         "Symmetry",
         "SymmetryCombination",
         "Tolerances",

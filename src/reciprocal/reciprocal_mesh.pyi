@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 from .brillouin_zone import BrillouinZone
 from .numerics import Tolerances
-from .sampling import SamplingResult
+from .sampling import SamplingConstraint, SamplingResult
 from .symmetry import PointOperation
 
 class GridCentering(str, Enum):
@@ -22,6 +22,8 @@ class MonkhorstPackGrid:
         centering: GridCentering | str = ...,
         shift: tuple[float, float] = ...,
     ) -> None: ...
+    @classmethod
+    def from_constraint(cls, zone: BrillouinZone, constraint: SamplingConstraint, *, centering: GridCentering | str = ..., shift: tuple[float, float] = ...) -> MonkhorstPackGrid: ...
 
 class MonkhorstPackMetadata:
     grid: MonkhorstPackGrid

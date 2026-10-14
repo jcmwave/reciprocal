@@ -4,41 +4,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from reciprocal.sampling import SamplingConstraint, legacy_constraint
+from reciprocal.sampling import SamplingConstraint, resolve_point_counts
 
 from .geometry import contains_points
 from .model import SamplingResult, UnitCell
 
 
 def _grid_shape(cell: UnitCell, constraint: SamplingConstraint | None) -> tuple[int, int]:
-    constraint = legacy_constraint(constraint)
-    constraint = {"type": "n_points", "value": 5} if constraint is None else constraint
-    kind = constraint.get("type")
-    value = constraint.get("value")
-    if kind == "n_points":
-        array = np.asarray(value)
-        if not np.issubdtype(array.dtype, np.number) or not np.all(np.isfinite(array)):
-            raise ValueError("n_points value must contain finite numbers")
-        if not np.all(array == np.floor(array)):
-            raise ValueError("n_points value must contain integers")
-        if array.ndim == 0:
-            counts = (int(array), int(array))
-        elif array.shape == (2,):
-            counts = (int(array[0]), int(array[1]))
-        else:
-            raise ValueError("n_points value must be a positive integer or pair")
-    elif kind == "max_length":
-        maximum = float(value)  # type: ignore[arg-type]
-        if not np.isfinite(maximum) or maximum <= 0.0:
-            raise ValueError("max_length must be finite and positive")
-        counts = tuple(
-            max(2, int(np.ceil(np.linalg.norm(vector) / maximum)) + 1) for vector in cell.basis
-        )
-    else:
-        raise ValueError("constraint type must be 'n_points' or 'max_length'")
-    if any(count < 1 for count in counts):
-        raise ValueError("sampling point counts must be positive")
-    return counts
+    fractional = cell.vertices[:, :2] @ np.linalg.inv(cell.basis[:, :2])
+    extents = np.ptp(fractional, axis=0) * np.linalg.norm(cell.basis[:, :2], axis=1)
+    first, second = resolve_point_counts(extents, constraint, placement="endpoints", default=5)
+    return first, second
 
 
 class CellSampler:
