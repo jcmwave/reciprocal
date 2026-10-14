@@ -61,6 +61,14 @@ from .representations import (
     TranslationAction,
 )
 from .sampling import NonPeriodicSampler, resolve_sampling_grid
+from .wood_anomalies import (
+    CircleArc,
+    CurveSamplingResult,
+    WoodAnomalyCircle,
+    WoodAnomalySet,
+    circle_disk_intersection,
+    make_wood_anomalies,
+)
 
 __all__ = [
     "CartesianPointOperation",
@@ -68,6 +76,12 @@ __all__ = [
     "NonPeriodicSymmetryReduction",
     "SymmetryCone",
     "SymmetryConeDomain",
+    "CircleArc",
+    "CurveSamplingResult",
+    "WoodAnomalyCircle",
+    "WoodAnomalySet",
+    "circle_disk_intersection",
+    "make_wood_anomalies",
     "resolve_sampling_grid",
     "AxialVectorRepresentation",
     "CartesianGrid",

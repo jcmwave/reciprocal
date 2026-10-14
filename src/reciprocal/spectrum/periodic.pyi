@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Any
 
 from reciprocal.brillouin_zone import BrillouinZone
@@ -7,6 +8,7 @@ from reciprocal.symmetry import PointOperation
 
 from .domains import KDomain
 from .model import FieldSamples, KSampling, SamplingConstraint, SourceRegion, TargetRegion
+from .wood_anomalies import WoodAnomalySet
 
 class ExpansionGenerator:
     source_index: int
@@ -38,6 +40,7 @@ class PeriodicKSpace:
     parent: object
     direct_lattice: Lattice
     def __init__(self, parent: object, direct_lattice: Lattice) -> None: ...
+    def wood_anomalies(self, *, shells: Iterable[int] = ...) -> WoodAnomalySet: ...
     def plan(self, *, source: SourceRegion | str = ..., target: TargetRegion | str = ..., constraint: SamplingConstraint = ..., tolerances: Tolerances = ...) -> PeriodicSamplingPlan: ...
 
 def build_expansion_map(source: KSampling, reciprocal_lattice: Lattice, zone: BrillouinZone, target_domain: KDomain, source_region: SourceRegion, target_region: TargetRegion, *, tolerances: Tolerances = ...) -> ExpansionMap: ...

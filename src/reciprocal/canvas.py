@@ -36,6 +36,7 @@ from reciprocal.spectrum import (
     PupilDomain,
 )
 from reciprocal.symmetry import SpecialPoint
+from reciprocal.spectrum.wood_anomalies import CurveSamplingResult, WoodAnomalySet
 
 
 _OKABE_ITO = mpl.colors.ListedColormap(
@@ -85,7 +86,7 @@ def _as_points(value: object) -> np.ndarray:
         value = value.target
     if isinstance(value, ExpansionMap):
         value = value.target
-    if isinstance(value, (KSampling, SamplingResult, InterpolationResult)):
+    if isinstance(value, (KSampling, SamplingResult, InterpolationResult, CurveSamplingResult)):
         array = value.points
     elif isinstance(value, KVectorGroup):
         array = value.k
@@ -108,7 +109,7 @@ def _sampling_weights(value: object, *, physical: bool) -> np.ndarray | None:
         value = value.target
     if isinstance(value, KSampling):
         return value.physical_weights if physical else value.normalized_weights
-    if isinstance(value):
+    if isinstance(value, CurveSamplingResult):
         return value.physical_weights if physical else value.normalized_weights
     if isinstance(value, SamplingResult):
         return value.weights * value.integration_element if physical else value.weights
@@ -446,6 +447,26 @@ class Canvas:
             clip_on=True,
         )
 
+    def plot_wood_anomalies(self, anomalies: WoodAnomalySet, *, color_by_order: bool = True, **kwargs: Any) -> tuple[Circle, ...]:
+        """Plot analytic anomaly circles clipped to the propagating disk."""
+        if not isinstance(anomalies, WoodAnomalySet):
+            raise TypeError("plot_wood_anomalies expects WoodAnomalySet")
+        domain = anomalies.propagating_domain
+        clip = Circle(domain.center, radius=domain.radius, transform=self.ax.transData)
+        shells = sorted(anomalies.circles_by_shell)
+        artists = []
+        for circle in anomalies.circles:
+            style = {"fill": False, "linewidth": 1.2, "edgecolor": "gray"}
+            if color_by_order:
+                style["edgecolor"] = choose_color(shells.index(circle.shell_index)+1, len(shells)+1).ravel()
+            style.update(kwargs)
+            artist = Circle(circle.center, radius=circle.radius, **style)
+            artist.set_clip_path(clip)
+            self.ax.add_patch(artist)
+            artists.append(artist)
+        x0, x1, y0, y1 = domain.bounds()
+        self.update_bbox([[x0,y0],[x1,y1]])
+        return tuple(artists)
 
     def plot_integration_cells(self, sampling: SamplingResult, **kwargs: Any) -> tuple[Patch, ...]:
         """Add one patch per retained integration cell, in sampling-point order.

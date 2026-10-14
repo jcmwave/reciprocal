@@ -50,8 +50,7 @@ class ExpansionMap:
             if not generators or primary not in generators:
                 raise ValueError("each equivalence class must contain its primary generator")
             if any(
-                generator.source_index < 0
-                or generator.source_index >= len(self.source.points)
+                generator.source_index < 0 or generator.source_index >= len(self.source.points)
                 for generator in generators
             ):
                 raise ValueError("generator source index is outside the source sampling")
@@ -333,9 +332,7 @@ def _representatives(
     )
     result = _canonicalize_sampling(result, zone.cell.basis[:, :2])
     operations = (
-        zone.point_group
-        if source_region is SourceRegion.IBZ
-        else (_identity(zone.point_group),)
+        zone.point_group if source_region is SourceRegion.IBZ else (_identity(zone.point_group),)
     )
     orbit_points = []
     orbit_sources = []
@@ -352,9 +349,7 @@ def _representatives(
     groups = _group_candidates(candidates, DEFAULT_TOLERANCES.relative * scale)
     unique_points = np.vstack(
         [
-            candidates[group][
-                np.lexsort((candidates[group, 1], candidates[group, 0]))[0]
-            ]
+            candidates[group][np.lexsort((candidates[group, 1], candidates[group, 0]))[0]]
             for group in groups
         ]
     )
@@ -440,6 +435,17 @@ class PeriodicKSpace:
             raise ValueError("with_periodic_structure expects a direct-space lattice")
         self.parent = parent
         self.direct_lattice = direct_lattice
+
+    def wood_anomalies(self, *, shells=(1, 2, 3, 4)):
+        """Return diffraction-threshold circles intersecting the propagating spectrum."""
+        from .wood_anomalies import make_wood_anomalies
+
+        magnitude = getattr(self.parent, "wavevector_magnitude", None)
+        if magnitude is None:
+            raise ValueError(
+                "Wood anomalies require a configured refractive index/wavevector magnitude"
+            )
+        return make_wood_anomalies(self.direct_lattice.make_reciprocal(), magnitude, shells=shells)
 
     def plan(
         self,
