@@ -3,6 +3,7 @@ from typing import Any, Mapping, Protocol
 from numpy.typing import ArrayLike, NDArray
 
 from .integration_cells import IntegrationCell
+from .spectrum.content_symmetry import NonPeriodicSymmetryReduction
 
 class SamplingDomain(Protocol):
     @property
@@ -40,7 +41,8 @@ class SamplingResult:
     kz: NDArray[Any] | None
     metadata: Mapping[str, object]
     integration_cells: tuple[IntegrationCell, ...] | None
-    def __init__(self, points: ArrayLike, normalized_weights: ArrayLike, integration_element: float, domain: SamplingDomain, point_ids: ArrayLike | None = ..., kz: ArrayLike | None = ..., metadata: Mapping[str, object] = ..., integration_cells: tuple[IntegrationCell, ...] | None = ...) -> None: ...
+    symmetry_reduction: NonPeriodicSymmetryReduction | None
+    def __init__(self, points: ArrayLike, normalized_weights: ArrayLike, integration_element: float, domain: SamplingDomain, point_ids: ArrayLike | None = ..., kz: ArrayLike | None = ..., metadata: Mapping[str, object] = ..., integration_cells: tuple[IntegrationCell, ...] | None = ..., symmetry_reduction: NonPeriodicSymmetryReduction | None = ...) -> None: ...
     @property
     def weights(self) -> NDArray[Any]: ...
     @property

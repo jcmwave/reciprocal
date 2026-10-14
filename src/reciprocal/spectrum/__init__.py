@@ -1,5 +1,12 @@
 """High-level reciprocal-spectrum sampling, expansion, and numerical tools."""
 
+from .content_symmetry import (
+    CartesianPointOperation,
+    ContentSymmetry,
+    NonPeriodicSymmetryReduction,
+    SymmetryCone,
+    SymmetryConeDomain,
+)
 from .domains import (
     EvanescentDisk,
     IntersectionDomain,
@@ -56,6 +63,11 @@ from .representations import (
 from .sampling import NonPeriodicSampler, resolve_sampling_grid
 
 __all__ = [
+    "CartesianPointOperation",
+    "ContentSymmetry",
+    "NonPeriodicSymmetryReduction",
+    "SymmetryCone",
+    "SymmetryConeDomain",
     "resolve_sampling_grid",
     "AxialVectorRepresentation",
     "CartesianGrid",

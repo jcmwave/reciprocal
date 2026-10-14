@@ -96,9 +96,11 @@ class FourierOrderTranslation:
         return np.take(array, int(matches[0]), axis=axis)
 
 
-def _operation(operation: object) -> PointOperation:
-    if not isinstance(operation, PointOperation):
-        raise TypeError("operation must be a PointOperation")
+def _operation(operation: object):
+    from .content_symmetry import CartesianPointOperation
+
+    if not isinstance(operation, (PointOperation, CartesianPointOperation)):
+        raise TypeError("operation must be a PointOperation or CartesianPointOperation")
     return operation
 
 
@@ -110,9 +112,7 @@ class ScalarRepresentation:
 
     def transform(self, value, operation, source_k, target_k, reciprocal_order):
         point_operation = _operation(operation)
-        return self.translation.apply(
-            value, reciprocal_order, source_k, target_k, point_operation
-        )
+        return self.translation.apply(value, reciprocal_order, source_k, target_k, point_operation)
 
 
 @dataclass(frozen=True, slots=True)

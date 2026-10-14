@@ -152,6 +152,8 @@ class FieldSamples(Generic[T]):
     def integrate(self, measure: object | None = None) -> NDArray[Any]:
         if not np.all(self.valid):
             raise ValueError("cannot integrate invalid field samples")
+        if self.sampling.symmetry_reduction is not None:
+            return self.sampling.symmetry_reduction.expand(self).integrate(measure)
         if measure is None:
             return self.sampling.integrate(self.values, valid=self.valid)
         from .integration import integrate
@@ -159,7 +161,7 @@ class FieldSamples(Generic[T]):
         return integrate(self.sampling, self.values, measure)  # type: ignore[arg-type]
 
     def average(self) -> NDArray[Any]:
-        return self.sampling.average(self.values, valid=self.valid)
+        return self.integrate() / self.sampling.integration_element
 
     def interpolate(self, target: KSampling | ArrayLike, **kwargs: object):
         from .interpolation import interpolate

@@ -104,10 +104,31 @@ class PolarIntegrationCell:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class OrbitIntegrationCell:
+    """A representative footprint with its full-orbit quadrature allocation."""
+
+    footprint: CartesianIntegrationCell | CircularIntegrationCell | PolarIntegrationCell
+    area: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(
+            self.footprint,
+            (CartesianIntegrationCell, CircularIntegrationCell, PolarIntegrationCell),
+        ):
+            raise TypeError("footprint must be an integration cell")
+        if not np.isfinite(self.area) or self.area <= 0:
+            raise ValueError("orbit area must be finite and positive")
+
+    @property
+    def geometric_area(self) -> float:
+        if isinstance(self.footprint, CartesianIntegrationCell):
+            return self.footprint.geometric_area
+        return self.footprint.area
 
 
 IntegrationCell: TypeAlias = (
-    CartesianIntegrationCell | CircularIntegrationCell | PolarIntegrationCell
+    CartesianIntegrationCell | CircularIntegrationCell | PolarIntegrationCell | OrbitIntegrationCell
 )
 
 __all__ = [
@@ -115,4 +136,5 @@ __all__ = [
     "CircularIntegrationCell",
     "IntegrationCell",
     "PolarIntegrationCell",
+    "OrbitIntegrationCell",
 ]

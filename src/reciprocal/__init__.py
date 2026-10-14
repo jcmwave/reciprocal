@@ -13,6 +13,7 @@ from .integration_cells import (
     CartesianIntegrationCell,
     CircularIntegrationCell,
     IntegrationCell,
+    OrbitIntegrationCell,
     PolarIntegrationCell,
 )
 from .kspace import KSpace
@@ -64,6 +65,7 @@ __all__ = [
     "HighSymmetryPath",
     "IncompatibleGridSymmetryError",
     "IntegrationCell",
+    "OrbitIntegrationCell",
     "KSpace",
     "KVector",
     "KVectorGroup",

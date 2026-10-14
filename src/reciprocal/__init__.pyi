@@ -6,6 +6,7 @@ from .brillouin_zone import BrillouinZone as BrillouinZone
 from .integration_cells import CartesianIntegrationCell as CartesianIntegrationCell
 from .integration_cells import CircularIntegrationCell as CircularIntegrationCell
 from .integration_cells import IntegrationCell as IntegrationCell
+from .integration_cells import OrbitIntegrationCell as OrbitIntegrationCell
 from .integration_cells import PolarIntegrationCell as PolarIntegrationCell
 from .kspace import KSpace as KSpace
 from .kvector import BlochFamily as BlochFamily

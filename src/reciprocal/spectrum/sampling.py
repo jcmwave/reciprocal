@@ -113,24 +113,77 @@ class NonPeriodicSampler:
     def sample(
         self,
         domain: KDomain,
-        grid: CartesianGrid | CircularGrid | PolarGrid | PointCounts | str = CartesianGrid((16, 16)),
+        grid: CartesianGrid | CircularGrid | PolarGrid | PointCounts | str = CartesianGrid(
+            (16, 16)
+        ),
         *,
         include_cells: bool = False,
         constraint: SamplingConstraint = None,
+        content_symmetry=None,
+        symmetry_cone=None,
+        adapt_symmetry: bool = False,
     ) -> KSampling:
+        spacing_constraint = isinstance(grid, str) and isinstance(
+            normalize_constraint(constraint), MaxSpacing
+        )
         if isinstance(grid, str):
             grid = resolve_sampling_grid(domain, grid, constraint)
         elif constraint is not None:
             raise ValueError("constraint cannot accompany an explicitly resolved grid")
         if isinstance(grid, PointCounts):
             grid = CartesianGrid((grid.first, grid.second))
+        from .content_symmetry import (
+            ContentSymmetry,
+            _symmetry_permutations,
+            prepare_symmetric_grid,
+            reduce_sampling,
+        )
+
+        if isinstance(content_symmetry, str):
+            content_symmetry = ContentSymmetry(content_symmetry)
+        if content_symmetry is not None and not isinstance(content_symmetry, ContentSymmetry):
+            raise TypeError("content_symmetry must be ContentSymmetry or a group name")
+        if symmetry_cone is not None and content_symmetry is None:
+            raise ValueError("symmetry_cone requires content_symmetry")
+        if content_symmetry is not None:
+            grid = prepare_symmetric_grid(
+                domain, grid, content_symmetry, adapt=adapt_symmetry or spacing_constraint
+            )
+        angular_offset = (
+            0.0 if content_symmetry is None else np.radians(content_symmetry.orientation_degrees)
+        )
+        multiple = 1 if content_symmetry is None else content_symmetry.rotations
         if isinstance(grid, CartesianGrid):
-            return self.sample_cartesian(domain, grid, include_cells=include_cells)
-        if isinstance(grid, CircularGrid):
-            return self.sample_circular(domain, grid, include_cells=include_cells)
-        if isinstance(grid, PolarGrid):
-            return self.sample_polar(domain, grid, include_cells=include_cells)
-        raise TypeError("grid must be CartesianGrid, CircularGrid, PolarGrid, or PointCounts")
+            result = self.sample_cartesian(domain, grid, include_cells=include_cells)
+        elif isinstance(grid, CircularGrid):
+            result = self.sample_circular(
+                domain,
+                grid,
+                include_cells=include_cells,
+                angular_multiple=multiple,
+                angular_offset=angular_offset,
+            )
+        elif isinstance(grid, PolarGrid):
+            result = self.sample_polar(
+                domain, grid, include_cells=include_cells, angular_offset=angular_offset
+            )
+        else:
+            raise TypeError("grid must be CartesianGrid, CircularGrid, PolarGrid, or PointCounts")
+        if content_symmetry is not None:
+            from dataclasses import replace
+
+            result = replace(
+                result,
+                metadata={
+                    **result.metadata,
+                    "content_symmetry": content_symmetry,
+                    "symmetry_operations": content_symmetry.operations,
+                },
+            )
+            if symmetry_cone is not None:
+                return reduce_sampling(result, content_symmetry, symmetry_cone)
+            _symmetry_permutations(result, content_symmetry)
+        return result
 
     def sample_cartesian(
         self, domain: KDomain, grid: CartesianGrid, *, include_cells: bool = False

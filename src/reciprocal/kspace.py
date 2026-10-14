@@ -204,14 +204,16 @@ class KSpace():
         return None if self.refractive_index is None else self.refractive_index * self.k0
 
     def sample_domain(self, grid, *, domain=None, direction=1, include_cells=False,
-                      constraint=None):
+                      constraint=None, content_symmetry=None, symmetry_cone=None, adapt_symmetry=False):
         """Sample a spectrum; optionally retain its integration-cell geometry."""
         from reciprocal.spectrum import KDomain, NonPeriodicSampler
 
         selected = self.spectrum_domain if domain is None else domain
         if not isinstance(selected, KDomain):
             raise ValueError("a bounded spectrum domain is required")
-        sampling = NonPeriodicSampler().sample(selected, grid, include_cells=include_cells, constraint=constraint)
+        sampling = NonPeriodicSampler().sample(selected, grid, include_cells=include_cells, constraint=constraint,
+                                               content_symmetry=content_symmetry, symmetry_cone=symmetry_cone,
+                                               adapt_symmetry=adapt_symmetry)
         magnitude = self.wavevector_magnitude
         return sampling if magnitude is None else sampling.with_kz(magnitude, direction)
 
@@ -224,6 +226,9 @@ class KSpace():
         direction=1,
         include_cells=False,
         constraint=None,
+        content_symmetry=None,
+        symmetry_cone=None,
+        adapt_symmetry=False,
     ):
         """Sample a non-periodic microscopy pupil or configured spectrum."""
         from reciprocal.spectrum import PupilDomain
@@ -243,7 +248,8 @@ class KSpace():
             domain = PupilDomain(self.k0 * numerical_aperture)
         return self.sample_domain(
             grid, domain=domain, direction=direction, include_cells=include_cells,
-            constraint=constraint,
+            constraint=constraint, content_symmetry=content_symmetry, symmetry_cone=symmetry_cone,
+            adapt_symmetry=adapt_symmetry,
         )
 
     def with_periodic_structure(self, direct_lattice):

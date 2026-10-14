@@ -18,7 +18,7 @@ from reciprocal.brillouin_zone import BrillouinZone
 from reciprocal.band_path import HighSymmetryPath
 from reciprocal.cells.model import PolygonDomain, SamplingResult, UnitCell
 from reciprocal.kspace import KSpace
-from reciprocal.integration_cells import CartesianIntegrationCell, CircularIntegrationCell
+from reciprocal.integration_cells import CartesianIntegrationCell, CircularIntegrationCell, OrbitIntegrationCell
 from reciprocal.kvector import KVectorGroup
 from reciprocal.lattice import Lattice, LatticeVectors
 from reciprocal.spectrum import (
@@ -463,6 +463,8 @@ class Canvas:
         style.update(kwargs)
         artists = []
         for cell in sampling.integration_cells:
+            if isinstance(cell, OrbitIntegrationCell):
+                cell = cell.footprint
             if isinstance(cell, CartesianIntegrationCell):
                 x0, x1, y0, y1 = cell.bounds
                 artist = Rectangle((x0, y0), x1 - x0, y1 - y0, **style)

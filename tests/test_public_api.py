@@ -25,6 +25,7 @@ def test_documented_public_api_is_stable():
         "HighSymmetryPath",
         "IncompatibleGridSymmetryError",
         "IntegrationCell",
+        "OrbitIntegrationCell",
         "KSpace",
         "KVector",
         "KVectorGroup",

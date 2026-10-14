@@ -13,6 +13,7 @@ from .integration_cells import (
     CartesianIntegrationCell,
     CircularIntegrationCell,
     IntegrationCell,
+    OrbitIntegrationCell,
     PolarIntegrationCell,
 )
 
@@ -34,6 +35,14 @@ class SamplingDomain(Protocol):
     def bounds(self) -> tuple[float, float, float, float]: ...
 
 
+@runtime_checkable
+class _SymmetryReduction(Protocol):
+    """Core-facing reduction interface; concrete maps live in spectrum."""
+
+    target: SamplingResult
+    full_to_reduced: IntArray
+
+    def expand(self, data: Any, *, verify: bool = True) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,8 +212,13 @@ class SamplingResult:
     kz: ComplexArray | None = None
     metadata: Mapping[str, object] = field(default_factory=dict)
     integration_cells: tuple[IntegrationCell, ...] | None = None
+    symmetry_reduction: _SymmetryReduction | None = None
 
     def __post_init__(self) -> None:
+        if self.symmetry_reduction is not None and not isinstance(
+            self.symmetry_reduction, _SymmetryReduction
+        ):
+            raise TypeError("symmetry_reduction must implement the sampling reduction interface")
         points = np.asarray(self.points, dtype=float)
         if points.ndim != 2 or points.shape[1] not in (2, 3) or len(points) == 0:
             raise ValueError("points must have shape (N, 2) or (N, 3) with N > 0")
@@ -265,7 +279,8 @@ class SamplingResult:
                         CartesianIntegrationCell,
                         CircularIntegrationCell,
                         PolarIntegrationCell,
-                                        ),
+                        OrbitIntegrationCell,
+                    ),
                 )
                 for cell in cells
             ):
@@ -337,6 +352,7 @@ class SamplingResult:
             kz,
             self.metadata,
             self.integration_cells,
+            self.symmetry_reduction,
         )
 
     def to_kvectors(self, wavelength: float, refractive_index: float, direction: int = 1):
