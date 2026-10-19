@@ -192,8 +192,11 @@ def make_high_symmetry_path(
             )
             count_index += 1
             fractions = np.linspace(0.0, 1.0, count)[1:]
-            for fraction in fractions:
-                all_points.append(start + fraction * (end - start))
+            # Coordinate interpolation preserves the exact endpoint, avoiding
+            # cancellation in start + (end - start) for near-zero components.
+            segment_points = np.linspace(start, end, count)[1:]
+            for fraction, point in zip(fractions, segment_points):
+                all_points.append(point)
                 all_distances.append(cumulative + fraction * length)
             cumulative += length
             node_indices.append(len(all_points) - 1)

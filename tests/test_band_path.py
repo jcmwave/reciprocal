@@ -14,12 +14,13 @@ from reciprocal.canvas import Canvas
         (1.5, 1.0, 90.0, ("Γ", "X", "S", "Y", "Γ")),
         (1.0, 1.0, 70.0, ("Γ", "X", "H1", "S", "Γ")),
         (1.0, 1.0, 60.0, ("Γ", "M", "K", "Γ")),
-        (1.3, 1.0, 73.0, ("Γ", "X", "C", "Y", "Γ")),
+        (1.3, 1.0, 73.0, ("Γ", "X", "H1", "Y", "C", "Γ")),
     ],
 )
-def test_default_paths_for_all_bravais_families(length1, length2, angle, labels):
+@pytest.mark.parametrize("resolution", [{"points_per_segment": 5}, {"max_spacing": 0.3}])
+def test_default_paths_for_all_bravais_families(length1, length2, angle, labels, resolution):
     zone = Lattice.from_lengths_angle(length1, length2, angle).make_reciprocal().brillouin_zone
-    path = make_high_symmetry_path(zone, points_per_segment=5)
+    path = make_high_symmetry_path(zone, **resolution)
     assert path.labels == labels
     assert np.all(np.diff(path.distance) >= 0.0)
     np.testing.assert_allclose(
@@ -28,7 +29,7 @@ def test_default_paths_for_all_bravais_families(length1, length2, angle, labels)
         atol=1e-12,
     )
     for label, index in zip(path.labels, path.node_indices):
-        np.testing.assert_allclose(path.points[index], zone.special_points[label].cartesian[:2])
+        np.testing.assert_array_equal(path.points[index], zone.special_points[label].cartesian[:2])
 
 
 def test_spacing_custom_branches_and_axis_helpers():
